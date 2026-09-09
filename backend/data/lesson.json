@@ -1,0 +1,41 @@
+{
+  "chapter": "Multiplication & Division",
+  "title": "Groups and Sharing",
+  "scenes": [
+    {
+      "id": "scene-1",
+      "title": "Make Equal Groups",
+      "concept": "equal groups",
+      "narration": "Let's start with equal groups. Here are 3 groups. Each group has 4 apples. Every group has the same number.",
+      "visual_description": "Three clearly separated groups/baskets with four apples in each; groups appear one after another."
+    },
+    {
+      "id": "scene-2",
+      "title": "Repeated Addition",
+      "concept": "repeated addition",
+      "narration": "We can count all the apples by adding 4 three times. 4 plus 4 plus 4 equals 12.",
+      "visual_description": "Keep the three groups visible, highlight each group in sequence, and build 4 + 4 + 4 = 12."
+    },
+    {
+      "id": "scene-3",
+      "title": "Turn It Into Multiplication",
+      "concept": "multiplication",
+      "narration": "Three equal groups of four can be written as 3 times 4. So 3 times 4 equals 12.",
+      "visual_description": "Transition from 4 + 4 + 4 = 12 to reveal 3 × 4 = 12, labelled 3 groups and 4 in each group."
+    },
+    {
+      "id": "scene-4",
+      "title": "Share Equally",
+      "concept": "division",
+      "narration": "Now we have 12 apples and share them equally into 3 groups. Each group gets 4 apples. That's division: 12 divided by 3 equals 4.",
+      "visual_description": "Begin with 12 apples together, distribute them into three groups, and reveal 12 ÷ 3 = 4."
+    },
+    {
+      "id": "scene-5",
+      "title": "They Work Together",
+      "concept": "multiplication/division relationship",
+      "narration": "Multiplication and division are connected. If 3 times 4 equals 12, then 12 divided by 3 equals 4. Nice work! You're ready for a quick quiz.",
+      "visual_description": "Show 3 × 4 = 12 and 12 ÷ 3 = 4 side by side with a connecting arrow and a clear transition to the quiz."
+    }
+  ]
+}

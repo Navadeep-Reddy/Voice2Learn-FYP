@@ -1,0 +1,371 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background-color: #f7f9fb;
+  color: #191c1e;
+  font-family: "Quicksand", ui-rounded, system-ui, sans-serif;
+  font-weight: 500;
+}
+
+/* Responsive type scale */
+.type-hero {
+  font-size: 32px;
+  line-height: 1.2;
+  font-weight: 700;
+}
+.type-title {
+  font-size: 28px;
+  line-height: 1.2;
+  font-weight: 700;
+}
+.type-card {
+  font-size: 22px;
+  line-height: 1.3;
+  font-weight: 700;
+}
+@media (min-width: 768px) {
+  .type-hero {
+    font-size: 48px;
+    line-height: 1.1;
+  }
+  .type-title {
+    font-size: 32px;
+  }
+  .type-card {
+    font-size: 24px;
+  }
+}
+
+/* Tactile pressable treatment */
+.tactile {
+  border-radius: 12px;
+  border: 1px solid #e0e3e5;
+  border-bottom-width: 6px;
+  border-right-width: 4px;
+  transition:
+    transform 150ms ease-out,
+    border-width 150ms ease-out,
+    background-color 150ms ease-out;
+}
+.tactile:hover {
+  transform: scale(1.015);
+  transition-duration: 150ms;
+}
+.tactile:active {
+  transform: translate(2px, 4px);
+  border-bottom-width: 2px;
+  border-right-width: 2px;
+  transition-duration: 150ms;
+}
+
+/* Visible keyboard focus */
+button:focus-visible,
+a:focus-visible {
+  outline: 3px solid #0d6ef0;
+  outline-offset: 2px;
+}
+
+/* Floating background math symbols */
+@keyframes v2l-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-4deg);
+  }
+  50% {
+    transform: translateY(-18px) rotate(5deg);
+  }
+}
+.v2l-float {
+  animation: v2l-float 7s ease-in-out infinite;
+}
+
+/* Scene + reveal motion (300-500ms scenes, 250-450ms reveals, 80-120ms stagger) */
+@keyframes v2l-stage-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.v2l-stage-in {
+  animation: v2l-stage-in 400ms ease-out both;
+}
+
+@keyframes v2l-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.v2l-pop-in {
+  animation: v2l-pop-in 350ms ease-out both;
+}
+
+@keyframes v2l-equation-in {
+  from {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+.v2l-equation-in {
+  animation: v2l-equation-in 400ms ease-out both;
+}
+
+@keyframes v2l-apple-drop {
+  from {
+    opacity: 0;
+    transform: translateY(-26px) scale(0.7);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.v2l-apple-drop {
+  animation: v2l-apple-drop 350ms ease-out both;
+}
+
+@keyframes v2l-link-draw {
+  from {
+    opacity: 0;
+    transform: scaleX(0.2);
+  }
+  to {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+}
+.v2l-link-draw {
+  animation: v2l-link-draw 450ms ease-out both;
+  transform-origin: center;
+}
+
+@keyframes v2l-sparkle {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+}
+.v2l-sparkle {
+  animation: v2l-sparkle 850ms ease-in-out 1;
+}
+
+@keyframes v2l-emphasis {
+  from {
+    border-color: #e0e3e5;
+    background-color: #f2f4f6;
+  }
+  to {
+    border-color: #0d6ef0;
+    background-color: #ffffff;
+  }
+}
+.v2l-emphasis {
+  animation: v2l-emphasis 300ms ease-out both;
+}
+
+@keyframes v2l-xfade-out {
+  from {
+    opacity: 1;
+    visibility: visible;
+  }
+  to {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+.v2l-xfade-out {
+  animation: v2l-xfade-out 400ms ease-out both;
+  animation-delay: 250ms;
+}
+
+@keyframes v2l-xfade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.v2l-xfade-in {
+  animation: v2l-xfade-in 400ms ease-out both;
+  animation-delay: 350ms;
+}
+
+@keyframes v2l-pile-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+    visibility: visible;
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.9);
+    visibility: hidden;
+  }
+}
+.v2l-pile-out {
+  animation: v2l-pile-out 400ms ease-out both;
+  animation-delay: 700ms;
+}
+
+@keyframes v2l-groups-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.v2l-groups-in {
+  animation: v2l-groups-in 400ms ease-out both;
+  animation-delay: 750ms;
+}
+
+/* Stagger helpers */
+.v2l-d1 { animation-delay: 80ms; }
+.v2l-d2 { animation-delay: 160ms; }
+.v2l-d3 { animation-delay: 240ms; }
+.v2l-d4 { animation-delay: 320ms; }
+.v2l-d5 { animation-delay: 400ms; }
+.v2l-d6 { animation-delay: 480ms; }
+.v2l-d7 { animation-delay: 620ms; }
+.v2l-d8 { animation-delay: 800ms; }
+
+/* Persistent microphone states (DESIGN.md section 9) */
+@keyframes v2l-mic-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(112, 93, 0, 0.35);
+  }
+  70% {
+    box-shadow: 0 0 0 16px rgba(112, 93, 0, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(112, 93, 0, 0);
+  }
+}
+.v2l-mic-listening {
+  animation: v2l-mic-pulse 1.6s ease-out infinite;
+}
+
+@keyframes v2l-mic-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.v2l-mic-ring {
+  animation: v2l-mic-spin 1s linear infinite;
+}
+
+@keyframes v2l-mic-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.3;
+  }
+  30% {
+    opacity: 1;
+  }
+}
+.v2l-mic-dots span {
+  animation: v2l-mic-dot 1.2s ease-in-out infinite;
+}
+.v2l-mic-dots span:nth-child(2) {
+  animation-delay: 150ms;
+}
+.v2l-mic-dots span:nth-child(3) {
+  animation-delay: 300ms;
+}
+
+@keyframes v2l-mic-speak-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.45);
+  }
+  70% {
+    box-shadow: 0 0 0 16px rgba(255, 255, 255, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0);
+  }
+}
+.v2l-mic-speaking {
+  animation: v2l-mic-speak-pulse 2s ease-out infinite;
+}
+
+@keyframes v2l-mic-wave {
+  0%,
+  100% {
+    transform: scaleY(0.4);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+.v2l-mic-wave span {
+  width: 4px;
+  height: 24px;
+  border-radius: 9999px;
+  background: currentColor;
+  transform-origin: center;
+  animation: v2l-mic-wave 1s ease-in-out infinite;
+}
+.v2l-mic-wave span:nth-child(2) {
+  animation-delay: 150ms;
+}
+.v2l-mic-wave span:nth-child(3) {
+  animation-delay: 300ms;
+}
+.v2l-mic-wave span:nth-child(4) {
+  animation-delay: 450ms;
+}
+
+/* Reduced motion: keep final states, drop nonessential animation */
+@media (prefers-reduced-motion: reduce) {
+  .v2l-float,
+  .v2l-stage-in,
+  .v2l-pop-in,
+  .v2l-equation-in,
+  .v2l-apple-drop,
+  .v2l-emphasis,
+  .v2l-xfade-out,
+  .v2l-xfade-in,
+  .v2l-pile-out,
+  .v2l-groups-in,
+  .v2l-link-draw,
+  .v2l-sparkle,
+  .v2l-mic-listening,
+  .v2l-mic-ring,
+  .v2l-mic-speaking,
+  .v2l-mic-wave span,
+  .v2l-mic-dots span,
+  .tactile,
+  .tactile:hover,
+  .tactile:active {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+  }
+}

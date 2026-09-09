@@ -1,0 +1,8 @@
+{
+  "student_name": "Alex",
+  "proficiency": {
+    "multiplication": 50,
+    "division": 50
+  },
+  "recent_attempts": []
+}
