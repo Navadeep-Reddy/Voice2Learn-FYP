@@ -1,4 +1,4 @@
-import type { LearnerState, Lesson } from "./types";
+import type { IntentRequest, IntentResult, LearnerState, Lesson, QuizGrade, QuizOptionId, QuizQuestion } from "./types";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
@@ -61,6 +61,45 @@ export async function askTutor(sceneId: string, question: string): Promise<strin
   }
   const data = (await response.json()) as TutorAnswer;
   return (data.answer ?? "").trim();
+}
+
+async function postJson<T>(path: string, body?: unknown): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!response.ok) {
+    let friendly = "My helper is having trouble right now. Try again.";
+    try {
+      const data = (await response.json()) as { detail?: string };
+      if (typeof data.detail === "string" && data.detail.trim()) {
+        friendly = data.detail;
+      }
+    } catch {
+      // Keep the friendly fallback.
+    }
+    throw new Error(friendly);
+  }
+  return response.json() as Promise<T>;
+}
+
+export function fetchQuizNext(): Promise<QuizQuestion> {
+  return postJson<QuizQuestion>("/api/quiz/next");
+}
+
+export function answerQuiz(
+  questionId: string,
+  selectedOption: QuizOptionId,
+): Promise<QuizGrade> {
+  return postJson<QuizGrade>("/api/quiz/answer", {
+    question_id: questionId,
+    selected_option: selectedOption,
+  });
+}
+
+export function classifyIntent(body: IntentRequest): Promise<IntentResult> {
+  return postJson<IntentResult>("/api/intent/classify", body);
 }
 
 export { API_BASE_URL };

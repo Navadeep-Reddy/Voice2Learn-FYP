@@ -15,7 +15,10 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import stt
+from .intent import router as intent_router
 from .models import LearnerState, Lesson, TranscriptionResponse
+from .quiz import reset_active_question
+from .quiz import router as quiz_router
 from .state import read_learner_state, reset_learner_state
 from .tutor import router as tutor_router
 
@@ -33,6 +36,8 @@ app.add_middleware(
 )
 
 app.include_router(tutor_router)
+app.include_router(quiz_router)
+app.include_router(intent_router)
 
 
 def load_lesson() -> Lesson:
@@ -52,6 +57,7 @@ def get_learner() -> LearnerState:
 
 @app.post("/api/demo/reset", response_model=LearnerState)
 def reset_demo() -> LearnerState:
+    reset_active_question()
     return reset_learner_state()
 
 

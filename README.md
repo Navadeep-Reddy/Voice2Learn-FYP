@@ -21,6 +21,7 @@ This repository is currently implementing the **Pre-Review MVP**: one polished M
 - Nemotron (`nvidia/nemotron-3-super-120b-a12b:free`) via OpenRouter
 - Browser TTS
 - 5 dynamically generated MCQs
+- backend Nemotron semantic intent routing (`POST /api/intent/classify`): every non-empty STT transcript is classified backend-side with current screen/context, so imperfect transcripts still map to the allowed screen action; the frontend never decides voice actions with exact local phrase matching
 - multiplication/division proficiency
 - local JSON persistence
 
@@ -44,7 +45,7 @@ No authentication, Supabase, extra curriculum, or final-model training is part o
 ### Voice / AI
 
 - local Whisper installation
-- Nemotron (`nvidia/nemotron-3-super-120b-a12b:free`) through OpenRouter
+- Nemotron (`nvidia/nemotron-3-super-120b-a12b:free`) through OpenRouter (lesson Q&A, quiz generation, and semantic intent classification)
 - browser `speechSynthesis`
 
 ## Expected Repository Shape

@@ -141,12 +141,11 @@ Frontend:
   - processing
   - speaking
   - error
-- transcript command resolver;
-- lesson commands:
-  - next
+- transcript command resolver (clearly temporary: only for this pass's isolated pre-OpenRouter verification; explicitly replaced by the backend semantic intent classifier in Pass 5);
+- lesson commands for this temporary verification only:
+  - next (including spoken `continue` as a variant of `next`)
   - back
   - repeat
-  - continue
   - start quiz / quiz me on the final scene
 - automatic listening resume after TTS where browser behavior permits;
 - click/tap microphone fallback.
@@ -202,7 +201,7 @@ Context includes:
 
 Frontend:
 
-- while on the lesson screen, route non-command transcripts to tutor Q&A;
+- while on the lesson screen, forward transcripts classified as lesson questions (`ask-question`) to tutor Q&A (final routing via the Pass 5 semantic intent classifier, using the original transcript);
 - show a friendly tutor speech bubble/panel without leaving the lesson;
 - speak the answer with browser TTS;
 - return to the same lesson scene afterward.
@@ -244,6 +243,8 @@ Backend:
 - `POST /api/quiz/next`;
 - `POST /api/quiz/answer`;
 - deterministic grading;
+- backend Nemotron semantic intent classifier (`POST /api/intent/classify`) using the context builder, replacing the temporary Pass 3 exact resolver as the final routing behavior;
+- strict Pydantic intent model, retry once on invalid output, friendly recoverable error;
 - proficiency update:
   - correct `+10`
   - incorrect `-5`
@@ -256,19 +257,22 @@ Frontend:
 - question count;
 - four tactile options;
 - TTS reads the question and A/B/C/D options before listening;
-- voice answers:
-  - A/B/C/D
+- route every non-empty quiz transcript to `POST /api/intent/classify` (no frontend exact local phrase matching as final behavior); voice answers:
+  - A/B/C/D (including imperfect STT variants)
   - option A/B/C/D
-- repeat-question voice command;
+- repeat-question voice action via the classifier;
 - correct/incorrect feedback;
 - speak feedback;
 - generate the next question only after state update;
 - Results screen with score and updated multiplication/division proficiency;
 - Review Lesson and Take Quiz Again.
+- route every non-empty transcript on every screen through `POST /api/intent/classify`; lesson `ask-question` actions forward the original transcript to `POST /api/tutor/ask`.
 
 ### Security / Correctness
 
 Do not send `correct_option` or `explanation` to the frontend before submission.
+
+Quiz intent classification may receive only the visible sanitized question/options, never the hidden correct answer or explanation. Empty transcripts are never sent to the LLM; listening resumes silently.
 
 ### Verify
 
@@ -276,6 +280,7 @@ Do not send `correct_option` or `explanation` to the frontend before submission.
 - questions are Nemotron-generated;
 - each has four options;
 - invalid arithmetic is rejected;
+- every non-empty transcript on home/lesson/quiz/results is routed to `POST /api/intent/classify` and mapped semantically (including imperfect STT) to a screen-allowed action; no final exact local phrase matching remains;
 - voice answer selection works;
 - proficiency visibly changes;
 - later questions receive updated context;

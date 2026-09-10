@@ -41,6 +41,7 @@ Do not invent requirements to resolve ambiguity. Prefer the smallest implementat
 - STT uses the **Whisper installation already available locally**. Do not download, train, or fine-tune a model as part of this MVP.
 - Nemotron model `nvidia/nemotron-3-super-120b-a12b:free` is called through **OpenRouter**.
 - Lesson Q&A uses the Nemotron AI tutor with current lesson/scene context.
+- Every non-empty STT transcript must be sent backend-side to Nemotron through OpenRouter for semantic, screen-aware intent classification using the current screen/context; frontend exact phrase matching must not decide voice actions.
 - Quiz questions are **fully Nemotron-generated**, generated **one at a time**, and are **multiple-choice only**.
 - Quiz grading is deterministic in the backend.
 - Learner proficiency is tracked only for:
@@ -58,7 +59,8 @@ Temporary Pre-Review implementations must sit behind small stable interfaces:
 - local JSON state -> later replaceable by Supabase
 - local Whisper adapter -> later replaceable by the fine-tuned Whisper deployment
 - OpenRouter Nemotron/LLM client -> isolated provider integration
-- context builder -> generates `backend/data/context.md` and is reused by lesson Q&A and quiz generation
+- backend Nemotron intent classifier -> small replaceable semantic routing boundary; frontend must not rely on exact local phrase matching
+- context builder -> generates `backend/data/context.md` and is reused by lesson Q&A, quiz generation, and intent classification
 - authored lesson JSON -> later replaceable by a larger lesson/content source
 
 Do not build the future replacement now.
@@ -113,6 +115,8 @@ The UI should operate as a simple voice loop:
 `listening -> processing -> speaking -> listening`
 
 While TTS is speaking, STT is paused. When TTS finishes, listening may resume automatically.
+
+Every non-empty transcript is classified by the backend Nemotron intent classifier using the current screen/context. The frontend must not decide voice actions with exact local phrase matching.
 
 The microphone remains clickable as a fallback control, but the normal demo flow should not require repeated clicks.
 

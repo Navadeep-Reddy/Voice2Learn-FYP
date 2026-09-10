@@ -23,7 +23,7 @@ export interface VoiceLoop {
   notice: string | null;
   voiceActive: boolean;
   toggleMic: () => void;
-  speak: (text: string) => void;
+  speak: (text: string, onDone?: () => void) => void;
   cancelSpeech: () => void;
   reportUnrecognized: () => void;
   sayAndShow: (text: string) => void;
@@ -194,17 +194,21 @@ export function useVoiceLoop(
     }
   }, [failWithRetry, setState, startListening]);
 
-  const speakRef = useRef((_text: string) => {});
+  const speakRef = useRef((_text: string, _onDone?: () => void) => {});
   const speak = useCallback(
-    (text: string) => {
+    (text: string, onDone?: () => void) => {
       stopRecording();
       if (errorTimerRef.current !== null) {
         window.clearTimeout(errorTimerRef.current);
         errorTimerRef.current = null;
       }
       if (!supportsSpeech()) {
-        // No TTS available: stay quiet and resume listening if activated.
-        if (activeRef.current) {
+        // No TTS available: run the completion (if any) immediately instead
+        // of auto-resuming first; otherwise resume listening if activated.
+        if (onDone) {
+          setState("processing");
+          onDone();
+        } else if (activeRef.current) {
           void startListening();
         } else {
           setState("idle");
@@ -216,20 +220,25 @@ export function useVoiceLoop(
       utterance.onstart = () => {
         setState("speaking");
       };
-      utterance.onend = () => {
-        if (activeRef.current) {
+      let finished = false;
+      const finish = () => {
+        if (finished) {
+          return;
+        }
+        finished = true;
+        // With a completion callback, the caller sequences the next step
+        // (next question, results) instead of auto-resuming first.
+        if (onDone) {
+          setState("processing");
+          onDone();
+        } else if (activeRef.current) {
           void startListening();
         } else {
           setState("idle");
         }
       };
-      utterance.onerror = () => {
-        if (activeRef.current) {
-          void startListening();
-        } else {
-          setState("idle");
-        }
-      };
+      utterance.onend = finish;
+      utterance.onerror = finish;
       window.speechSynthesis.speak(utterance);
     },
     [setState, startListening, stopRecording],

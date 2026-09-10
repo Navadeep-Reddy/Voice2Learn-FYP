@@ -104,10 +104,10 @@ Show:
 - simple current proficiency for multiplication and division
 - persistent microphone control
 
-Required voice intent:
+Required voice intent (resolved semantically by `POST /api/intent/classify`, not by frontend exact phrase matching):
 
-- `start lesson`
-- similar clear phrases such as `start`, `let's learn`, `multiplication and division`
+- `start lesson` and similar imperfect variants such as `start`, `let's learn`, `multiplication and division` -> `start-lesson`
+- anything else non-empty -> `unclear` (stay on Home and ask the child to repeat)
 
 Click/tap on the lesson card is a fallback.
 
@@ -125,18 +125,17 @@ Show:
 - persistent microphone/listening state
 - a small hint that the child may ask a question
 
-Required voice intents:
+Required voice intents (resolved semantically by `POST /api/intent/classify`, not by frontend exact phrase matching):
 
-- `next`
-- `go back`
-- `repeat`
-- `continue`
-- `start quiz` / `quiz me` on the final scene
-- free-form lesson question
+- navigation: `next` (including spoken variants such as `go next` and `continue`, plus imperfect STT variants), `back` (including `go back`)
+- `repeat` (repeat the current scene narration)
+- `start-quiz` (spoken as `start quiz` / `quiz me`), allowed only on the final scene
+- free-form lesson question -> `ask-question`
+- anything else non-empty that is neither navigation nor a lesson question -> `unclear`
 
 On the final scene, show a `Start Quiz` fallback button and prompt the child to say `start quiz`.
 
-When a transcript is not a recognized navigation command, treat it as a lesson question and send it to the tutor endpoint.
+When a transcript is classified as `ask-question`, send the original transcript to the tutor endpoint (`POST /api/tutor/ask`). The classifier response never carries lesson question content; the frontend uses the original transcript.
 
 ### 5.3 Quiz
 
@@ -152,11 +151,11 @@ Show:
 
 When a question appears, TTS should read the question and all four options with their A/B/C/D labels before listening for an answer.
 
-Required voice intents:
+Required voice intents (resolved semantically by `POST /api/intent/classify`, not by frontend exact phrase matching):
 
-- `A`, `B`, `C`, `D`
-- `option A`, `option B`, `option C`, `option D`
-- `repeat question`
+- `select-option` with `option` A/B/C/D (spoken as `A`, `B`, `C`, `D`, including imperfect variants such as `option A`, `bee`, `see`)
+- `repeat-question` (spoken as `repeat question`; repeat the visible question and options)
+- anything else non-empty -> `unclear`
 
 Click/tap on an option is a fallback.
 
@@ -175,10 +174,11 @@ Show:
 - `Review Lesson`
 - `Take Quiz Again`
 
-Required voice intents:
+Required voice intents (resolved semantically by `POST /api/intent/classify`, not by frontend exact phrase matching):
 
-- `review lesson`
-- `take quiz again`
+- `review-lesson` (spoken as `review lesson`)
+- `retake-quiz` (spoken as `take quiz again`)
+- anything else non-empty -> `unclear` (stay on Results and ask the child to repeat)
 
 ## 6. Authored Lesson: Groups and Sharing
 
@@ -286,17 +286,24 @@ After that initial activation:
 
 True barge-in while the system is speaking is not required.
 
-### 7.3 Command Resolution
+### 7.3 Semantic Intent Classification
 
-Resolve deterministic commands before routing text to the AI tutor.
+Every non-empty STT transcript must be sent to `POST /api/intent/classify` for backend Nemotron semantic, screen-aware intent classification through OpenRouter. Frontend exact phrase matching must not decide voice actions.
 
-Examples:
+The classifier maps imperfect STT semantically to only actions allowed on the current screen:
 
-- lesson: `next`, `back`, `repeat`
-- quiz: `option b`, `b`, `repeat question`
-- results: `review lesson`, `take quiz again`
+- home: `start-lesson`, `unclear`
+- lesson: `next`, `back`, `repeat`, `start-quiz` (final scene only), `ask-question`, `unclear` (spoken `continue` maps semantically to `next`, never a separate action)
+- quiz: `select-option` with `option` A/B/C/D, `repeat-question`, `unclear`
+- results: `review-lesson`, `retake-quiz`, `unclear`
 
-During a lesson, any other non-empty transcript is treated as a student question.
+When the action is `ask-question`, the frontend calls the existing tutor endpoint (`POST /api/tutor/ask`) with the original transcript. The classifier response never sends or rewrites lesson question content.
+
+Quiz classification may receive only the visible sanitized question and options (`quiz_question`, `quiz_options`); it must never receive the hidden correct answer or explanation.
+
+Empty transcripts and silence are not sent to the LLM. The app resumes listening silently without showing an error.
+
+Validate classifier output strictly with Pydantic. On invalid model output, retry once, then return a friendly recoverable error that keeps the child on the current screen.
 
 ## 8. Tutor Q&A
 
@@ -518,9 +525,10 @@ It reads:
 It produces concise markdown-formatted context for:
 
 - lesson Q&A;
-- quiz generation.
+- quiz generation;
+- semantic intent classification.
 
-Before each Nemotron call, overwrite a generated runtime file at:
+Before each Nemotron call, including every intent-classifier provider attempt, overwrite a generated runtime file at:
 
 `backend/data/context.md`
 
@@ -552,6 +560,42 @@ Output:
 ```
 
 Uses the local Whisper adapter.
+
+### `POST /api/intent/classify`
+
+Classifies every non-empty STT transcript semantically with Nemotron through OpenRouter, using the current screen/context.
+
+Input:
+
+```json
+{
+  "transcript": "go next please",
+  "screen": "lesson",
+  "scene_id": "scene-2",
+  "quiz_question": null,
+  "quiz_options": null
+}
+```
+
+- `transcript` (string, required): the raw non-empty STT text.
+- `screen` (string, required): `home`, `lesson`, `quiz`, or `results`.
+- `scene_id` (string or null): current lesson scene when `screen` is `lesson`.
+- `quiz_question` / `quiz_options` (present only when `screen` is `quiz`): the visible sanitized question text and options. Never send the hidden correct answer or explanation.
+
+Output:
+
+```json
+{
+  "action": "next",
+  "option": null
+}
+```
+
+- `action` is restricted to the actions allowed on the given `screen` (see Section 7.3).
+- `option` carries `A`, `B`, `C`, or `D` only when the action is `select-option`; otherwise null.
+- The response never carries lesson question content; when the action is `ask-question`, the frontend sends the original transcript to `POST /api/tutor/ask`.
+
+Validate strictly with Pydantic, retry once on invalid model output, then return a friendly recoverable error.
 
 ### `POST /api/tutor/ask`
 
