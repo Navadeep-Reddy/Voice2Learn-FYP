@@ -35,7 +35,7 @@ Create the minimum working frontend/backend structure and the stable data contra
 - Whisper
 - microphone capture
 - OpenRouter
-- MiMo
+- Nemotron
 - quiz
 - context builder
 
@@ -86,7 +86,7 @@ Do not substitute five text slides.
 ### Do Not Build Yet
 
 - real STT
-- MiMo Q&A
+- Nemotron Q&A
 - dynamic quiz
 - proficiency mutation
 
@@ -170,7 +170,7 @@ Whisper failure must not crash the UI.
 
 ---
 
-## Pass 4 — Context Builder and MiMo Lesson Q&A
+## Pass 4 — Context Builder and Nemotron Lesson Q&A
 
 ### Goal
 
@@ -183,7 +183,7 @@ Backend:
 - OpenRouter client;
 - model configured through environment variable;
 - one context-builder module;
-- generate/overwrite `backend/data/context.md` before each MiMo call;
+- generate/overwrite `backend/data/context.md` before each Nemotron call;
 - Pydantic tutor response model;
 - `POST /api/tutor/ask`.
 
@@ -226,7 +226,7 @@ The answer must be relevant to the visible three-groups-of-four explanation.
 
 ---
 
-## Pass 5 — MiMo Quiz and Learner Proficiency
+## Pass 5 — Nemotron Quiz and Learner Proficiency
 
 ### Goal
 
@@ -236,7 +236,7 @@ Complete the learning loop with a dynamic five-question assessment.
 
 Backend:
 
-- MiMo quiz-generation prompt using the context builder;
+- Nemotron quiz-generation prompt using the context builder;
 - strict Pydantic question model;
 - arithmetic verifier for `a*b` and `a/b`;
 - retry once on invalid/unverifiable output;
@@ -273,7 +273,7 @@ Do not send `correct_option` or `explanation` to the frontend before submission.
 ### Verify
 
 - five questions complete end-to-end;
-- questions are MiMo-generated;
+- questions are Nemotron-generated;
 - each has four options;
 - invalid arithmetic is rejected;
 - voice answer selection works;

@@ -2,15 +2,15 @@
 
 ## Current pass
 
-Pass 4 — Context Builder and MiMo Lesson Q&A. Status: Not Started.
+Pass 4 — Context Builder and Nemotron Lesson Q&A. Status: Not Started.
 
 ## Completed
 
 - [x] Pass 1 — Foundation and Data Contracts (approved)
 - [x] Pass 2 — Design Shell and Interactive Lesson (approved)
 - [x] Pass 3 — Voice Loop and Local Whisper (approved)
-- [ ] Pass 4 — Context Builder and MiMo Lesson Q&A
-- [ ] Pass 5 — MiMo Quiz and Learner Proficiency
+- [ ] Pass 4 — Context Builder and Nemotron Lesson Q&A
+- [ ] Pass 5 — Nemotron Quiz and Learner Proficiency
 - [ ] Pass 6 — Demo Hardening and Polish
 
 Last completed pass: Pass 3.

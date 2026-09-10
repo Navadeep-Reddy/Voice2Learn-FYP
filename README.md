@@ -2,7 +2,7 @@
 
 Voice2Learn is a voice-first interactive mathematics learning application for children who may have difficulty using conventional physical input.
 
-This repository is currently implementing the **Pre-Review MVP**: one polished Multiplication & Division lesson, contextual voice Q&A, a five-question MiMo-generated MCQ quiz, and simple learner proficiency tracking.
+This repository is currently implementing the **Pre-Review MVP**: one polished Multiplication & Division lesson, contextual voice Q&A, a five-question Nemotron-generated MCQ quiz, and simple learner proficiency tracking.
 
 ## Read First
 
@@ -18,7 +18,7 @@ This repository is currently implementing the **Pre-Review MVP**: one polished M
 - Lesson: Groups and Sharing
 - 5 authored lesson scenes
 - Local Whisper STT
-- MiMo via OpenRouter
+- Nemotron (`nvidia/nemotron-3-super-120b-a12b:free`) via OpenRouter
 - Browser TTS
 - 5 dynamically generated MCQs
 - multiplication/division proficiency
@@ -44,7 +44,7 @@ No authentication, Supabase, extra curriculum, or final-model training is part o
 ### Voice / AI
 
 - local Whisper installation
-- MiMo through OpenRouter
+- Nemotron (`nvidia/nemotron-3-super-120b-a12b:free`) through OpenRouter
 - browser `speechSynthesis`
 
 ## Expected Repository Shape
@@ -73,7 +73,7 @@ The exact internal source layout may stay small and should not be generalized be
 - npm
 - Python 3.11+ recommended
 - the user's local Whisper runtime/model already installed
-- an OpenRouter API key with access to the intended MiMo model
+- an OpenRouter API key with access to the intended Nemotron model (`nvidia/nemotron-3-super-120b-a12b:free`)
 
 The project must not automatically download Whisper.
 
@@ -83,7 +83,7 @@ The backend should expose an `.env.example` with at least:
 
 ```env
 OPENROUTER_API_KEY=
-OPENROUTER_MODEL=
+OPENROUTER_MODEL=nvidia/nemotron-3-super-120b-a12b:free
 ```
 
 Keep the model identifier configurable rather than hardcoding it.
@@ -134,7 +134,7 @@ If implementation choices change these commands, update this README to match the
 4. Navigate the five lesson scenes by voice.
 5. Ask a question about the current scene.
 6. Finish the lesson.
-7. Complete five MiMo-generated multiple-choice questions by voice.
+7. Complete five Nemotron-generated multiple-choice questions by voice.
 8. Show the updated multiplication/division proficiency.
 9. Review the lesson or take the quiz again.
 

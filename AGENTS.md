@@ -39,9 +39,9 @@ Do not invent requirements to resolve ambiguity. Prefer the smallest implementat
 - Repeated physical interaction must not be required during the normal demo flow.
 - True mid-sentence interruption/barge-in is **out of scope**.
 - STT uses the **Whisper installation already available locally**. Do not download, train, or fine-tune a model as part of this MVP.
-- MiMo is called through **OpenRouter**.
-- Lesson Q&A uses MiMo with current lesson/scene context.
-- Quiz questions are **fully MiMo-generated**, generated **one at a time**, and are **multiple-choice only**.
+- Nemotron model `nvidia/nemotron-3-super-120b-a12b:free` is called through **OpenRouter**.
+- Lesson Q&A uses the Nemotron AI tutor with current lesson/scene context.
+- Quiz questions are **fully Nemotron-generated**, generated **one at a time**, and are **multiple-choice only**.
 - Quiz grading is deterministic in the backend.
 - Learner proficiency is tracked only for:
   - `multiplication`
@@ -57,7 +57,7 @@ Temporary Pre-Review implementations must sit behind small stable interfaces:
 
 - local JSON state -> later replaceable by Supabase
 - local Whisper adapter -> later replaceable by the fine-tuned Whisper deployment
-- OpenRouter MiMo client -> isolated provider integration
+- OpenRouter Nemotron/LLM client -> isolated provider integration
 - context builder -> generates `backend/data/context.md` and is reused by lesson Q&A and quiz generation
 - authored lesson JSON -> later replaceable by a larger lesson/content source
 
@@ -88,7 +88,7 @@ Prefer explicit code over clever abstractions.
 
 - Frontend: React + TypeScript + Vite + Tailwind CSS.
 - Backend: Python + FastAPI.
-- Validate MiMo structured output with Pydantic.
+- Validate Nemotron structured output with Pydantic.
 - Never use raw `eval`.
 - Keep provider-specific logic isolated.
 - Keep components small enough to understand, but do not split files mechanically.
@@ -96,7 +96,7 @@ Prefer explicit code over clever abstractions.
 - Keep all student-facing copy age-appropriate and short.
 - Do not expose secrets or OpenRouter keys to the frontend.
 - Do not expose the quiz answer to the frontend before submission.
-- Do not silently recover from invalid MiMo output. Validate, retry once, then return a friendly recoverable error.
+- Do not silently recover from invalid Nemotron output. Validate, retry once, then return a friendly recoverable error.
 
 ## Local Whisper Rule
 
