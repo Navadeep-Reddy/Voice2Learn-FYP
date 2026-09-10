@@ -102,4 +102,8 @@ export function classifyIntent(body: IntentRequest): Promise<IntentResult> {
   return postJson<IntentResult>("/api/intent/classify", body);
 }
 
+export function resetDemo(): Promise<LearnerState> {
+  return postJson<LearnerState>("/api/demo/reset");
+}
+
 export { API_BASE_URL };

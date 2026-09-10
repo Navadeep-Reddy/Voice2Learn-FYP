@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { answerQuiz, askTutor, classifyIntent, fetchLearner, fetchLesson, fetchQuizNext } from "./api";
+import { answerQuiz, askTutor, classifyIntent, fetchLearner, fetchLesson, fetchQuizNext, resetDemo } from "./api";
 import type {
   IntentResult,
   LearnerState,
@@ -64,6 +64,8 @@ export default function App() {
   const [finalProficiency, setFinalProficiency] = useState<Proficiency | null>(
     null,
   );
+  const [resetting, setResetting] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
 
   const screenRef = useRef(screen);
   screenRef.current = screen;
@@ -78,6 +80,7 @@ export default function App() {
   const quizSeqRef = useRef(0);
   const intentPendingRef = useRef(false);
   const intentSeqRef = useRef(0);
+  const resetPendingRef = useRef(false);
   const scoreRef = useRef(0);
   scoreRef.current = score;
   const quizIndexRef = useRef(0);
@@ -108,6 +111,57 @@ export default function App() {
   const goLesson = useCallback(() => {
     setSceneIndex(0);
     setScreen("lesson");
+  }, []);
+
+  const handleResetDemo = useCallback(() => {
+    if (resetPendingRef.current) {
+      return;
+    }
+    resetPendingRef.current = true;
+    setResetting(true);
+    setResetError(null);
+    // Stop an active recording/listening loop so a transcript cannot start
+    // a new classification during reset; otherwise just cancel any speech
+    // so the next demo starts predictably.
+    const voice = voiceRef.current;
+    if (voice?.voiceActive) {
+      voice.toggleMic();
+    } else {
+      voice?.cancelSpeech();
+    }
+    // Invalidate anything in flight so stale responses cannot repaint the UI.
+    intentSeqRef.current += 1;
+    intentPendingRef.current = false;
+    tutorSeqRef.current += 1;
+    tutorPendingRef.current = false;
+    quizSeqRef.current += 1;
+    void (async () => {
+      try {
+        const pristine = await resetDemo();
+        setLearner(pristine);
+        setSceneIndex(0);
+        setTutorQuestion(null);
+        setTutorAnswer(null);
+        setTutorError(null);
+        setTutorPending(false);
+        setCurrentQuestion(null);
+        setQuizIndex(0);
+        setScore(0);
+        setSelectedOption(null);
+        setGrade(null);
+        setGrading(false);
+        setQuizLoading(false);
+        setQuizError(null);
+        setFinalProficiency(null);
+        setError(null);
+        setScreen("home");
+      } catch {
+        setResetError("I could not reset the demo. Try again.");
+      } finally {
+        resetPendingRef.current = false;
+        setResetting(false);
+      }
+    })();
   }, []);
 
   const speakQuestion = useCallback((q: QuizQuestion, index: number) => {
@@ -577,74 +631,82 @@ export default function App() {
     <div className="min-h-screen bg-canvas">
       <Header />
       <main className="relative z-10">
-        {screen === "home" ? (
-          <HomeScreen learner={learner} onStartLesson={goLesson} />
-        ) : screen === "lesson" ? (
-          <LessonScreen
-            lesson={lesson}
-            sceneIndex={sceneIndex}
-            onHome={() => {
-              voice.cancelSpeech();
-              setScreen("home");
-            }}
-            onBack={() => setSceneIndex((i) => Math.max(0, i - 1))}
-            onNext={() => setSceneIndex((i) => Math.min(sceneCount - 1, i + 1))}
-            onStartQuiz={startQuiz}
-            tutorQuestion={tutorQuestion}
-            tutorAnswer={tutorAnswer}
-            tutorPending={tutorPending}
-            tutorError={tutorError}
-          />
-        ) : screen === "quiz" ? (
-          currentQuestion ? (
-            <QuizScreen
-              question={currentQuestion}
-              index={quizIndex}
-              total={QUIZ_TOTAL}
-              selectedOption={selectedOption}
-              grade={grade}
-              locked={grading || grade !== null || quizLoading}
-              error={quizError}
-              onSelect={(id) => void submitAnswer(id)}
+        <div key={screen} className="v2l-stage-in">
+          {screen === "home" ? (
+            <HomeScreen
+              learner={learner}
+              onStartLesson={goLesson}
+              onResetDemo={handleResetDemo}
+              resetting={resetting}
+              resetError={resetError}
             />
-          ) : (
-            <div className="mx-auto w-full max-w-[1120px] px-5 pb-36 pt-6 md:px-16 md:pt-10">
-              <div className="rounded-xl border border-line bg-surface p-8 text-center">
-                {quizError ? (
-                  <>
-                    <h1 className="type-card text-ink">Oh no!</h1>
-                    <p className="mt-2 text-base text-muted">{quizError}</p>
-                    <button
-                      type="button"
-                      onClick={retryQuizLoad}
-                      className="tactile mt-6 min-h-[48px] bg-brand px-6 py-3 text-base font-bold text-white"
-                    >
-                      Try again
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <p className="type-card text-ink">
-                      Getting your question ready…
-                    </p>
-                    <p className="mt-2 text-base text-muted">
-                      Question {quizIndex + 1} of {QUIZ_TOTAL} is on its way.
-                    </p>
-                  </>
-                )}
+          ) : screen === "lesson" ? (
+            <LessonScreen
+              lesson={lesson}
+              sceneIndex={sceneIndex}
+              onHome={() => {
+                voice.cancelSpeech();
+                setScreen("home");
+              }}
+              onBack={() => setSceneIndex((i) => Math.max(0, i - 1))}
+              onNext={() => setSceneIndex((i) => Math.min(sceneCount - 1, i + 1))}
+              onStartQuiz={startQuiz}
+              tutorQuestion={tutorQuestion}
+              tutorAnswer={tutorAnswer}
+              tutorPending={tutorPending}
+              tutorError={tutorError}
+            />
+          ) : screen === "quiz" ? (
+            currentQuestion ? (
+              <QuizScreen
+                question={currentQuestion}
+                index={quizIndex}
+                total={QUIZ_TOTAL}
+                selectedOption={selectedOption}
+                grade={grade}
+                locked={grading || grade !== null || quizLoading}
+                error={quizError}
+                onSelect={(id) => void submitAnswer(id)}
+              />
+            ) : (
+              <div className="mx-auto w-full max-w-[1120px] px-5 pb-36 pt-6 md:px-16 md:pt-10">
+                <div className="rounded-xl border border-line bg-surface p-8 text-center">
+                  {quizError ? (
+                    <>
+                      <h1 className="type-card text-ink">Oh no!</h1>
+                      <p className="mt-2 text-base text-muted">{quizError}</p>
+                      <button
+                        type="button"
+                        onClick={retryQuizLoad}
+                        className="tactile mt-6 min-h-[48px] bg-brand px-6 py-3 text-base font-bold text-white"
+                      >
+                        Try again
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="type-card text-ink">
+                        Getting your question ready…
+                      </p>
+                      <p className="mt-2 text-base text-muted">
+                        Question {quizIndex + 1} of {QUIZ_TOTAL} is on its way.
+                      </p>
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
-          )
-        ) : (
-          <ResultsScreen
-            score={score}
-            total={QUIZ_TOTAL}
-            proficiency={finalProficiency ?? learner.proficiency}
-            studentName={learner.student_name}
-            onReviewLesson={reviewLesson}
-            onRetakeQuiz={startQuiz}
-          />
-        )}
+            )
+          ) : (
+            <ResultsScreen
+              score={score}
+              total={QUIZ_TOTAL}
+              proficiency={finalProficiency ?? learner.proficiency}
+              studentName={learner.student_name}
+              onReviewLesson={reviewLesson}
+              onRetakeQuiz={startQuiz}
+            />
+          )}
+        </div>
       </main>
       <FloatingBackground />
       <Microphone

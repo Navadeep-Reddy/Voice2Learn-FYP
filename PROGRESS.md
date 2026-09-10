@@ -2,7 +2,7 @@
 
 ## Current pass
 
-Pass 6 — Demo Hardening and Polish. Status: Not Started.
+All BUILD_PLAN passes complete and approved. No active pass.
 
 ## Completed
 
@@ -11,9 +11,9 @@ Pass 6 — Demo Hardening and Polish. Status: Not Started.
 - [x] Pass 3 — Voice Loop and Local Whisper (approved)
 - [x] Pass 4 — Context Builder and Nemotron Lesson Q&A (approved)
 - [x] Pass 5 — Nemotron Quiz and Learner Proficiency (approved)
-- [ ] Pass 6 — Demo Hardening and Polish
+- [x] Pass 6 — Demo Hardening and Polish (approved)
 
-Last completed pass: Pass 5.
+Last completed pass: Pass 6.
 
 ## Known issues
 
@@ -21,4 +21,4 @@ Last completed pass: Pass 5.
 
 ## Next action
 
-Implement Pass 6 from BUILD_PLAN.md after beginning the next coding session.
+Await any future user-requested work/review; do not begin final-project expansion automatically.

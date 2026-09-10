@@ -4,9 +4,18 @@ import ProficiencyBar from "./ProficiencyBar";
 interface Props {
   learner: LearnerState;
   onStartLesson: () => void;
+  onResetDemo: () => void;
+  resetting: boolean;
+  resetError: string | null;
 }
 
-export default function HomeScreen({ learner, onStartLesson }: Props) {
+export default function HomeScreen({
+  learner,
+  onStartLesson,
+  onResetDemo,
+  resetting,
+  resetError,
+}: Props) {
   return (
     <div className="mx-auto w-full max-w-[1120px] px-5 pb-36 pt-6 md:px-16 md:pt-10">
       <h1 className="type-hero text-ink">Hi, Alex!</h1>
@@ -52,6 +61,25 @@ export default function HomeScreen({ learner, onStartLesson }: Props) {
           />
         </div>
       </section>
+
+      <button
+        type="button"
+        onClick={onResetDemo}
+        disabled={resetting}
+        className="tactile mt-6 min-h-[44px] bg-surface px-5 py-2 text-sm font-bold text-muted disabled:cursor-wait disabled:opacity-60"
+        aria-label="Reset demo"
+        aria-busy={resetting}
+      >
+        {resetting ? "Resetting…" : "Reset Demo"}
+      </button>
+      {resetError ? (
+        <p
+          role="alert"
+          className="mt-2 rounded-xl bg-redsoft p-3 text-sm font-bold text-redder"
+        >
+          {resetError}
+        </p>
+      ) : null}
     </div>
   );
 }

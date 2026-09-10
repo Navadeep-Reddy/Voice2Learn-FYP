@@ -105,17 +105,26 @@ VITE_API_BASE_URL=http://localhost:8000
 
 ## Development
 
-Once the scaffold exists, the expected development flow is:
-
 ### Backend
 
 ```bash
 cd backend
+cp .env.example .env
+# Edit backend/.env and set OPENROUTER_API_KEY.
+# Leave OPENROUTER_MODEL as nvidia/nemotron-3-super-120b-a12b:free
+# unless directed otherwise. Never commit backend/.env.
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
 ```
+
+The local Whisper model must already exist on this machine; nothing is
+downloaded at install or runtime. Optional Whisper overrides live in
+`backend/.env.example` as `VOICE2LEARN_WHISPER_*` (`MODEL_DIR`, `DEVICE`,
+`COMPUTE_TYPE`); defaults match the verified local machine.
+
+Never put an API key or secret in frontend code or commit `backend/.env`.
 
 ### Frontend
 
@@ -125,7 +134,11 @@ npm install
 npm run dev
 ```
 
-If implementation choices change these commands, update this README to match the repository rather than preserving stale instructions.
+Production check: `npm run build`.
+
+For a repeatable demo, use the `Reset Demo` button on the Home screen
+(or `POST /api/demo/reset`); it restores the pristine learner (50/50
+proficiency, no attempts) and clears the active quiz question.
 
 ## Demo Flow
 
