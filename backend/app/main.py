@@ -7,12 +7,17 @@ import logging
 import tempfile
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import stt
 from .models import LearnerState, Lesson, TranscriptionResponse
 from .state import read_learner_state, reset_learner_state
+from .tutor import router as tutor_router
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 LESSON_PATH = DATA_DIR / "lesson.json"
@@ -26,6 +31,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(tutor_router)
 
 
 def load_lesson() -> Lesson:

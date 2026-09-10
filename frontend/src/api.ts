@@ -23,6 +23,10 @@ export interface TranscriptionResult {
   text: string;
 }
 
+export interface TutorAnswer {
+  answer: string;
+}
+
 export async function transcribeAudio(blob: Blob): Promise<string> {
   const form = new FormData();
   form.append("file", blob, "utterance.webm");
@@ -35,6 +39,28 @@ export async function transcribeAudio(blob: Blob): Promise<string> {
   }
   const data = (await response.json()) as TranscriptionResult;
   return (data.text ?? "").trim();
+}
+
+export async function askTutor(sceneId: string, question: string): Promise<string> {
+  const response = await fetch(`${API_BASE_URL}/api/tutor/ask`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ scene_id: sceneId, question }),
+  });
+  if (!response.ok) {
+    let friendly = "My helper is having trouble right now. Try again.";
+    try {
+      const data = (await response.json()) as { detail?: string };
+      if (typeof data.detail === "string" && data.detail.trim()) {
+        friendly = data.detail;
+      }
+    } catch {
+      // Keep the friendly fallback.
+    }
+    throw new Error(friendly);
+  }
+  const data = (await response.json()) as TutorAnswer;
+  return (data.answer ?? "").trim();
 }
 
 export { API_BASE_URL };

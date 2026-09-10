@@ -4,3 +4,4 @@ dist/
 backend/.venv/
 __pycache__/
 *.pyc
+/backend/data/context.md

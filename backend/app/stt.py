@@ -119,7 +119,13 @@ def transcribe(audio_path: str | Path) -> str:
     with _lock:
         model = _get_model_locked()
         try:
-            segments, _info = model.transcribe(str(path), language="en", beam_size=1)
+            segments, _info = model.transcribe(
+                str(path),
+                language="en",
+                beam_size=1,
+                vad_filter=True,
+                condition_on_previous_text=False,
+            )
             return "".join(segment.text for segment in segments).strip()
         except TranscriptionError:
             raise

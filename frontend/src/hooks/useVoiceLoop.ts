@@ -165,24 +165,34 @@ export function useVoiceLoop(
       setState("idle");
       return;
     }
+    const resumeSilently = () => {
+      // Silence/empty success is not an error: stay in the continuous loop
+      // without speaking. Leave `processing`/`listening` first so the
+      // startListening guard does not block the next window.
+      setNotice(null);
+      setState("idle");
+      if (activeRef.current) {
+        void startListening();
+      }
+    };
     const blob = new Blob(chunksRef.current, { type: "audio/webm" });
     chunksRef.current = [];
     if (blob.size === 0) {
-      failWithRetry();
+      resumeSilently();
       return;
     }
     setState("processing");
     try {
       const text = await transcribeAudio(blob);
-      if (!text) {
-        failWithRetry();
+      if (!text || !text.trim()) {
+        resumeSilently();
         return;
       }
       transcriptRef.current(text);
     } catch {
       failWithRetry();
     }
-  }, [failWithRetry, setState]);
+  }, [failWithRetry, setState, startListening]);
 
   const speakRef = useRef((_text: string) => {});
   const speak = useCallback(

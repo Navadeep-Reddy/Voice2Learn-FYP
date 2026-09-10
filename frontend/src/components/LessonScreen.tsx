@@ -1,5 +1,6 @@
 import type { Lesson } from "../types";
 import SceneVisual from "./SceneVisual";
+import TutorBubble from "./TutorBubble";
 
 interface Props {
   lesson: Lesson;
@@ -8,6 +9,10 @@ interface Props {
   onNext: () => void;
   onHome: () => void;
   onStartQuiz: () => void;
+  tutorQuestion: string | null;
+  tutorAnswer: string | null;
+  tutorPending: boolean;
+  tutorError: string | null;
 }
 
 export default function LessonScreen({
@@ -17,6 +22,10 @@ export default function LessonScreen({
   onNext,
   onHome,
   onStartQuiz,
+  tutorQuestion,
+  tutorAnswer,
+  tutorPending,
+  tutorError,
 }: Props) {
   const scene = lesson.scenes[sceneIndex];
   const isFirst = sceneIndex === 0;
@@ -57,6 +66,13 @@ export default function LessonScreen({
       >
         <p className="text-base text-ink md:text-lg">{scene.narration}</p>
       </section>
+
+      <TutorBubble
+        question={tutorQuestion}
+        answer={tutorAnswer}
+        pending={tutorPending}
+        error={tutorError}
+      />
 
       <p className="mt-4 text-center text-base text-muted">
         You can ask a question about this scene!

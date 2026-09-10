@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchLearner, fetchLesson } from "./api";
+import { askTutor, fetchLearner, fetchLesson } from "./api";
 import type { LearnerState, Lesson } from "./types";
 import { useVoiceLoop } from "./hooks/useVoiceLoop";
 import { resolveHomeCommand, resolveLessonCommand } from "./lib/commands";
@@ -23,6 +23,10 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [screen, setScreen] = useState<Screen>("home");
   const [sceneIndex, setSceneIndex] = useState(0);
+  const [tutorQuestion, setTutorQuestion] = useState<string | null>(null);
+  const [tutorAnswer, setTutorAnswer] = useState<string | null>(null);
+  const [tutorError, setTutorError] = useState<string | null>(null);
+  const [tutorPending, setTutorPending] = useState(false);
 
   const screenRef = useRef(screen);
   screenRef.current = screen;
@@ -32,6 +36,17 @@ export default function App() {
   lessonRef.current = lesson;
 
   const voiceRef = useRef<VoiceLoopApi | null>(null);
+  const tutorPendingRef = useRef(false);
+  const tutorSeqRef = useRef(0);
+
+  const clearTutor = useCallback(() => {
+    tutorSeqRef.current += 1;
+    tutorPendingRef.current = false;
+    setTutorQuestion(null);
+    setTutorAnswer(null);
+    setTutorError(null);
+    setTutorPending(false);
+  }, []);
 
   const goLesson = useCallback(() => {
     setSceneIndex(0);
@@ -81,8 +96,55 @@ export default function App() {
       } else if (command === "start-quiz") {
         voice.sayAndShow(QUIZ_SOON_MESSAGE);
       } else {
-        // No tutor Q&A until Pass 4: friendly recoverable prompt instead.
-        voice.reportUnrecognized();
+        // Lesson Q&A (Pass 4): deterministic commands resolved first; any
+        // other non-empty transcript is a student question for the tutor.
+        const text = raw.trim();
+        if (!text) {
+          voice.reportUnrecognized();
+          return;
+        }
+        if (tutorPendingRef.current) {
+          return;
+        }
+        const sceneId = currentLesson.scenes[index].id;
+        const requestIndex = index;
+        tutorPendingRef.current = true;
+        tutorSeqRef.current += 1;
+        const seq = tutorSeqRef.current;
+        setTutorQuestion(text);
+        setTutorAnswer(null);
+        setTutorError(null);
+        setTutorPending(true);
+        void (async () => {
+          try {
+            const answer = await askTutor(sceneId, text);
+            if (tutorSeqRef.current !== seq) {
+              return;
+            }
+            if (screenRef.current !== "lesson" || sceneRef.current !== requestIndex) {
+              return;
+            }
+            tutorPendingRef.current = false;
+            setTutorAnswer(answer);
+            setTutorPending(false);
+            voice.speak(answer);
+          } catch (err) {
+            if (tutorSeqRef.current !== seq) {
+              return;
+            }
+            if (screenRef.current !== "lesson" || sceneRef.current !== requestIndex) {
+              return;
+            }
+            const friendly =
+              err instanceof Error && err.message
+                ? err.message
+                : "My helper is having trouble right now. Try again.";
+            tutorPendingRef.current = false;
+            setTutorError(friendly);
+            setTutorPending(false);
+            voice.speak(friendly);
+          }
+        })();
       }
     },
     [goLesson],
@@ -112,6 +174,12 @@ export default function App() {
   // Controlled narration: every scene change speaks once through the voice
   // loop (which pauses listening while TTS speaks and resumes after, but
   // only auto-listens once the mic has been voice-activated).
+  // Stale tutor UI never carries across scenes or screens; this also
+  // invalidates any in-flight tutor response via the sequence guard.
+  useEffect(() => {
+    clearTutor();
+  }, [screen, sceneIndex, clearTutor]);
+
   useEffect(() => {
     if (screen === "lesson" && lesson) {
       voice.speak(lesson.scenes[sceneIndex].narration);
@@ -192,6 +260,10 @@ export default function App() {
             onBack={() => setSceneIndex((i) => Math.max(0, i - 1))}
             onNext={() => setSceneIndex((i) => Math.min(sceneCount - 1, i + 1))}
             onStartQuiz={quizSoon}
+            tutorQuestion={tutorQuestion}
+            tutorAnswer={tutorAnswer}
+            tutorPending={tutorPending}
+            tutorError={tutorError}
           />
         )}
       </main>
