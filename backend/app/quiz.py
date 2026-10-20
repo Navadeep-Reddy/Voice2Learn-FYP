@@ -27,6 +27,7 @@ from .state import read_learner_state, write_learner_state
 log = logging.getLogger("voice2learn.quiz")
 
 FRIENDLY_QUIZ_ERROR = "My helper is having trouble right now. Try again."
+FRIENDLY_QUIZ_TIMEOUT = "This question is taking too long. Say try again to retry."
 STALE_QUESTION_MESSAGE = "That question is not active anymore. Please try again."
 
 router = APIRouter()
@@ -200,8 +201,11 @@ async def next_question() -> QuizNextResponse:
         ]
         try:
             content = await llm.chat_completion(messages)
+        except llm.LLMTimeoutError:
+            log.warning("Quiz generation timed out; waiting for learner retry")
+            raise HTTPException(status_code=502, detail=FRIENDLY_QUIZ_TIMEOUT)
         except llm.LLMError:
-            log.warning("quiz provider call failed", exc_info=True)
+            log.warning("Quiz generation failed; see NVIDIA provider diagnostics")
             raise HTTPException(status_code=502, detail=FRIENDLY_QUIZ_ERROR)
         except Exception:  # noqa: BLE001 - never leak internals
             log.exception("quiz call failed")

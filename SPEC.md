@@ -85,12 +85,11 @@ The demo should prove:
 
 - STT: user's existing local Whisper installation
 - Target intent routing: Jev through Vercel AI Gateway; current baseline classification still uses Nemotron until Pass 8.
-- Tutor + question generation: Nemotron through NVIDIA Integrate first
-  (`nvidia/nemotron-3-super-120b-a12b`), with OpenRouter fallback
-  (`nvidia/nemotron-3-super-120b-a12b:free`)
+- Tutor + question generation: Nemotron through NVIDIA Integrate only
+  (`nvidia/nemotron-3-super-120b-a12b`), without an alternate-provider fallback
 - TTS: backend female neural speech (`edge-tts`, network required); no browser/system voice playback
 
-The frontend calls only the application backend. Nemotron access uses NVIDIA Integrate as primary and OpenRouter as fallback through `backend/app/llm.py`. Jev has its own backend client and key; its failures do not fall back to Nemotron. At the user's request, neural TTS is the only speech source; failed speech displays text rather than using a browser/system voice.
+The frontend calls only the application backend. Nemotron access uses NVIDIA Integrate only through `backend/app/llm.py`; provider failures return a friendly recoverable error without trying another provider. Jev has its own backend client and key; its failures do not fall back to Nemotron. At the user's request, neural TTS is the only speech source; failed speech displays text rather than using a browser/system voice.
 
 ## 5. Screens
 
@@ -310,7 +309,7 @@ True barge-in while the system is speaking is not required.
 
 ### 7.3 Semantic Intent Classification
 
-Target: every accepted non-empty STT transcript goes to `POST /api/intent/classify`, where Jev selects one action allowed by the current screen and interaction state. Until Pass 8, this endpoint uses the current Nemotron NVIDIA-primary/OpenRouter-fallback boundary. No frontend exact phrase matching decides actions. Empty turns resume silently.
+Target: every accepted non-empty STT transcript goes to `POST /api/intent/classify`, where Jev selects one action allowed by the current screen and interaction state. Until Pass 8, this endpoint uses the NVIDIA-only Nemotron boundary. No frontend exact phrase matching decides actions. Empty turns resume silently.
 
 Preserve the current action names during migration:
 
@@ -686,6 +685,10 @@ Activate a reusable Web Audio playback context during the initial microphone/cli
 
 ## 13. Error Behavior
 
+NVIDIA requests use `chat_template_kwargs.enable_thinking=false` for short structured demo responses, with a 60-second total deadline and a 5-second connection timeout. A timed-out question load returns a friendly 502 with “This question is taking too long. Say try again to retry.” Provider timeouts do not automatically retry; retain the existing single retry for invalid structured output. Failed question-load classifier requests carry `quiz_error=true` without question/options and include notes state. Revalidate before retry, reject duplicate loads and stale replies, and never retry grading or mutate proficiency when a question load fails.
+
+Automatically recover from NVIDIA HTTP 500/502/503/504 within the same completion request: at most four total attempts, with 0.5/1/2-second backoff. The 60-second deadline includes every attempt and delay; it is not restarted per attempt. Keep the existing quiz loading state until success or exhausted recovery. Do not retry other HTTP statuses (including authentication/access errors and 429), transport failures or timeouts. This is an NVIDIA-only, side-effect-free completion retry; do not retry quiz answer submission or apply it to Jev's separate no-retry transport policy.
+
 The demo must fail gracefully.
 
 Examples:
@@ -742,11 +745,11 @@ Microphone → browser speech/silence detection → complete utterance
 → female neural TTS (text-only recovery on failure) → automatic listening resume
 ```
 
-Jev selects the specific action in one call. Do not first classify navigation versus learning and then make a second dependent model call to identify navigation. Navigation never needs Nemotron. Nemotron remains the tutor and one-at-a-time quiz generator through the existing NVIDIA/OpenRouter boundary. Authored lesson checks remain deterministically compared in application code, without quiz proficiency writes; do not claim they are backend graded today.
+Jev selects the specific action in one call. Do not first classify navigation versus learning and then make a second dependent model call to identify navigation. Navigation never needs Nemotron. Nemotron remains the tutor and one-at-a-time quiz generator through the NVIDIA-only boundary. Authored lesson checks remain deterministically compared in application code, without quiz proficiency writes; do not claim they are backend graded today.
 
 ### Provider integration
 
-Use `backend/app/jev.py` with existing async `httpx`, typed Pydantic request/response models, and backend-only settings. Chosen transport: Vercel's TypeSafe-compatible HTTP API, not direct TypeSafe hosting or OpenRouter's decision endpoint. Configuration: `AI_GATEWAY_API_KEY`, `AI_GATEWAY_MODEL` default `typesafe-ai/jev`, `AI_GATEWAY_TIMEOUT_SECONDS` default 10, finite positive maximum 30. Base `https://ai-gateway.vercel.sh/typesafe`; POST `/v1/systemone`, optional diagnostic GET `/v1/models`; bearer Gateway key. Confirm official format at implementation time. No SDK, local Jev weight download, training, startup network call, or Gateway decision/model fallback is required. Missing keys fail only the requesting feature; basic content startup remains available.
+Use `backend/app/jev.py` with existing async `httpx`, typed Pydantic request/response models, and backend-only settings. Chosen transport: Vercel's TypeSafe-compatible HTTP API, not direct TypeSafe hosting. Configuration: `AI_GATEWAY_API_KEY`, `AI_GATEWAY_MODEL` default `typesafe-ai/jev`, `AI_GATEWAY_TIMEOUT_SECONDS` default 10, finite positive maximum 30. Base `https://ai-gateway.vercel.sh/typesafe`; POST `/v1/systemone`, optional diagnostic GET `/v1/models`; bearer Gateway key. Confirm official format at implementation time. No SDK, local Jev weight download, training, startup network call, or Gateway decision/model fallback is required. Missing keys fail only the requesting feature; basic content startup remains available.
 
 Official provider references (checked 2026-10-20): [Vercel TypeSafe-compatible API](https://vercel.com/docs/ai-gateway/sdks-and-apis/typesafe), [Jev model](https://vercel.com/ai-gateway/models/jev), [TypeSafe Choice](https://docs.typesafe.ai/primitives/choice). Catalog listing does not establish key/team access. Verify a real decision before claiming live operation; echoed model aliases do not prove the resolved version.
 
@@ -757,7 +760,7 @@ Validate the response envelope, selected offered choice, exact probability keys,
 - Valid low confidence or valid ambiguity: return `unclear`; no retry to force a choice.
 - Invalid provider JSON/schema/distribution: retry once with rebuilt context, then friendly 502. Maximum two provider attempts per turn.
 - Missing configuration, authentication/access failure, timeout, network or non-success response: friendly 502, no retry or fallback. Never expose raw bodies, keys, headers, prompts or traces to students.
-- Keep provider integration isolated from `llm.py`, `nvidia.py`, `openrouter.py`, tutor and quiz generation.
+- Keep provider integration isolated from `llm.py`, `nvidia.py`, tutor and quiz generation.
 - Keep duplicate guards and stale-result guards. Discard intent responses if screen, scene, question, check completion, notes state, phase or confirmation state changed before execution. Recheck state before all side effects.
 - Record classifier latency separately from VAD, Whisper, tutor, TTS and total turn latency. Do not promise a speedup before comparable measurements.
 

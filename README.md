@@ -20,7 +20,7 @@ The **Pre-Review MVP** contains one Multiplication & Division lesson, contextual
 - Lesson: Groups and Sharing
 - 5 authored lesson scenes, each with a quick understanding check
 - Local Whisper STT
-- Nemotron via NVIDIA Integrate primary with OpenRouter fallback
+- Nemotron via NVIDIA Integrate only
 - Female neural edge-tts speech; text-only recovery if audio is unavailable
 - 5 dynamically generated MCQs
 - backend Nemotron semantic intent routing (`POST /api/intent/classify`): every non-empty STT transcript is classified backend-side with current screen/context, so imperfect transcripts still map to the allowed screen action; the frontend never decides voice actions with exact local phrase matching
@@ -48,11 +48,14 @@ No authentication, Supabase, extra curriculum, or final-model training is part o
 ### Voice / AI
 
 - local Whisper installation
-- Nemotron (`nvidia/nemotron-3-super-120b-a12b`) through NVIDIA Integrate first, falling back to OpenRouter (`nvidia/nemotron-3-super-120b-a12b:free`) for lesson Q&A, quiz generation, and semantic intent classification
+- Nemotron (`nvidia/nemotron-3-super-120b-a12b`) through NVIDIA Integrate only for lesson Q&A, quiz generation, and semantic intent classification
 - backend `edge-tts` female neural speech (network required); no browser/system voice playback
 
-The backend keeps NVIDIA and OpenRouter provider details behind one Nemotron
-LLM boundary; the frontend never calls either provider directly.
+The backend keeps NVIDIA provider details behind one Nemotron LLM boundary;
+the frontend never calls NVIDIA directly. NVIDIA failures return a friendly
+recoverable error without trying another provider.
+
+Nemotron requests explicitly disable extended reasoning (`chat_template_kwargs.enable_thinking=false`) for the short structured demo responses. Requests have a 60-second total deadline (5-second connection timeout). Transient NVIDIA HTTP 500/502/503/504 responses retry automatically up to three times, with 0.5/1/2-second backoff inside that same deadline; the quiz remains loading rather than asking for manual retry after each brief failure. Authentication/configuration/other HTTP errors (including 429) and provider timeouts do not automatically retry. A quiz-generation timeout says the question is taking too long; say “try again” or use its retry button if automatic recovery fails. Invalid structured output still retries once, and quiz arithmetic remains backend-validated. NVIDIA availability and response latency are external dependencies; automatic recovery is bounded rather than an availability guarantee.
 
 ## Expected Repository Shape
 
@@ -82,7 +85,7 @@ The exact internal source layout may stay small and should not be generalized be
 - npm
 - Python 3.11+ recommended
 - the user's local Whisper runtime/model already installed
-- an NVIDIA Integrate API key for `nvidia/nemotron-3-super-120b-a12b`; an OpenRouter API key for the fallback model (`nvidia/nemotron-3-super-120b-a12b:free`)
+- an NVIDIA Integrate API key for `nvidia/nemotron-3-super-120b-a12b`
 
 The project must not automatically download Whisper.
 
@@ -93,8 +96,6 @@ Current `backend/.env.example` documents:
 ```env
 NVIDIA_API_KEY=
 NVIDIA_MODEL=nvidia/nemotron-3-super-120b-a12b
-OPENROUTER_API_KEY=
-OPENROUTER_MODEL=nvidia/nemotron-3-super-120b-a12b:free
 VOICE2LEARN_TTS_VOICE=en-US-JennyNeural
 ```
 
@@ -141,8 +142,7 @@ To stop servers launched in another terminal, run:
 ```bash
 cd backend
 test -f .env || cp .env.example .env
-# Edit backend/.env and set NVIDIA_API_KEY. OPENROUTER_API_KEY is used as the
-# fallback. Never commit backend/.env.
+# Edit backend/.env and set NVIDIA_API_KEY. Never commit backend/.env.
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -192,7 +192,7 @@ This repository is intentionally building a **focused Pre-Review vertical slice*
 
 ## Planned Jev Setup — Not Implemented on This Base
 
-The migration keeps local STT, female neural speech with text-only error recovery, lesson checks, notes, Nemotron tutoring/question generation, and backend quiz grading. Jev will classify intent through Vercel AI Gateway, separate from the existing NVIDIA/OpenRouter LLM boundary.
+The migration keeps local STT, female neural speech with text-only error recovery, lesson checks, notes, Nemotron tutoring/question generation, and backend quiz grading. Jev will classify intent through Vercel AI Gateway, separate from the NVIDIA-only LLM boundary.
 
 After Pass 7 adds support, configure these backend-only settings in ignored `backend/.env`:
 
@@ -202,7 +202,7 @@ AI_GATEWAY_MODEL=typesafe-ai/jev
 AI_GATEWAY_TIMEOUT_SECONDS=10
 ```
 
-These are planned variables, not current implemented setup or changes already made to `.env.example`. Never paste keys into chat, print environment/config values, place keys in shell commands/logs, commit them, or expose them through frontend/VITE_ variables. NVIDIA/OpenRouter credentials remain necessary for tutoring and quiz generation. No direct TypeSafe key or local Jev model installation is required. Gateway model/team access must be verified; a catalog listing is not a successful decision.
+These are planned variables, not current implemented setup or changes already made to `.env.example`. Never paste keys into chat, print environment/config values, place keys in shell commands/logs, commit them, or expose them through frontend/VITE_ variables. NVIDIA credentials remain necessary for tutoring and quiz generation. No direct TypeSafe key or local Jev model installation is required. Gateway model/team access must be verified; a catalog listing is not a successful decision.
 
 SPEC Section 16 documents the chosen [Vercel TypeSafe-compatible API](https://vercel.com/docs/ai-gateway/sdks-and-apis/typesafe). No runtime classifier fallback to Nemotron will be added. Failed Jev routing gives a friendly recoverable error on the current screen.
 

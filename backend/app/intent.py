@@ -263,7 +263,7 @@ async def classify_intent(body: IntentClassifyRequest) -> IntentClassifyResponse
         try:
             content = await llm.chat_completion(messages)
         except llm.LLMError:
-            log.warning("Intent classification failed: both Nemotron providers unavailable; see provider diagnostics")
+            log.warning("Intent classification failed: NVIDIA Nemotron unavailable; see provider diagnostics")
             raise HTTPException(status_code=502, detail=FRIENDLY_INTENT_ERROR)
         except Exception:  # noqa: BLE001 - never leak internals
             log.exception("intent call failed")

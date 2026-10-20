@@ -345,6 +345,8 @@ Order: **Prerequisite R → 7 → 8 → 9 → 10 → 11 → 12**. Each is a sepa
 
 User-requested speech revision (2026-10-21): references below to preserving neural/browser speech or TTS fallback now mean preserving the female neural voice with text-only failure recovery, per SPEC. Do not restore browser/system speech. Original Passes 1–6 remain approved history.
 
+User-requested provider revision (2026-10-21): Nemotron uses NVIDIA Integrate only, without an alternate-provider fallback. Provider references in original Passes 1–6 are historical; preserve the current NVIDIA-only boundary during the follow-up passes.
+
 ## Prerequisite R — Reconcile the Existing Post-Review Baseline
 
 ### Goal
@@ -375,7 +377,7 @@ Exercise voice check selection/unlock/retry, gated forward movement, Back/Home, 
 - Inspect official Vercel TypeSafe-compatible API and native Choice schema; use `SPEC.md` Section 16. Implement `backend/app/jev.py` with existing async httpx/Pydantic. No application routing switch.
 - Backend settings: `AI_GATEWAY_API_KEY`, `AI_GATEWAY_MODEL=typesafe-ai/jev`, finite positive `AI_GATEWAY_TIMEOUT_SECONDS=10`, maximum 30. No hardcoded key, startup network call, direct TypeSafe account, model download or automatic Gateway fallback.
 - Typed response validation: offered selected choice, exact finite probability keys/range/sum, confidence, max-choice consistency, optional nullable routing metadata. Bound transport; close clients on every path; sanitize all failures.
-- Preserve current classifier using the NVIDIA/OpenRouter Nemotron boundary. Reuse dependencies; edit requirements only if necessary. Keep keys out of logs, reports, shell arguments and frontend variables.
+- Preserve current classifier using the NVIDIA-only Nemotron boundary. Reuse dependencies; edit requirements only if necessary. Keep keys out of logs, reports, shell arguments and frontend variables.
 - Existing Jev work/evidence from another branch may be inspected, but reusing it needs review against this base; it is not installed/approved here by assumption.
 
 ### Files
@@ -394,7 +396,7 @@ Offline checks for request/auth/URL, config, invalid JSON/distributions, nullabl
 - Use one screen/state-specific Choice over allowed actions. Internal check-A/B/C/D and select-A/B/C/D normalize to `select-check` and `select-option`. Offer no answer selection during loading/grading/feedback/error or without an active visible question/check.
 - Include current scene/final status, check completion, visible check/quiz options, notes and error/phase context. Resolve authored data backend-side; never include hidden answers, check hints, old graded explanations or raw learner-attempt answer records in classification state.
 - Named conservative provisional acceptance thresholds; low confidence → unclear without retry. Invalid output retries once; config/auth/network/timeout/non-2xx → sanitized 502 without retry or Nemotron fallback.
-- Preserve gate notices, Back-from-first-scene Home, original-transcript tutor forwarding, notes, local check comparison and deterministic quiz grading. Do not change neural/browser TTS, VAD or model-generation provider fallbacks.
+- Preserve gate notices, Back-from-first-scene Home, original-transcript tutor forwarding, notes, local check comparison and deterministic quiz grading. Do not change neural TTS/text recovery, VAD or the NVIDIA-only model-generation boundary.
 - Recheck screen/state before action execution; extend guards only where necessary to preserve the new context. No navigation extensions from Section 17 yet.
 
 ### Files

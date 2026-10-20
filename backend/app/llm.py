@@ -1,26 +1,27 @@
-"""NVIDIA-primary Nemotron access with one OpenRouter fallback."""
+"""NVIDIA-only Nemotron access behind the shared LLM boundary."""
 
 from __future__ import annotations
 
 import logging
 
-from . import nvidia, openrouter
+from . import nvidia
 
 log = logging.getLogger("voice2learn.llm")
 
 
 class LLMError(RuntimeError):
-    """Raised when neither configured Nemotron provider succeeds."""
+    """Raised when NVIDIA cannot provide a Nemotron completion."""
+
+
+class LLMTimeoutError(LLMError):
+    """Raised when the NVIDIA request deadline is exceeded."""
 
 
 async def chat_completion(messages: list[dict[str, str]]) -> str:
     try:
         return await nvidia.chat_completion(messages)
-    except nvidia.NvidiaError:
-        log.warning("NVIDIA provider failed; attempting OpenRouter fallback")
-
-    try:
-        return await openrouter.chat_completion(messages)
-    except Exception as exc:  # noqa: BLE001 - provider details stay internal
-        log.warning("OpenRouter fallback failed")
-        raise LLMError("Nemotron providers unavailable") from exc
+    except nvidia.NvidiaTimeoutError as exc:
+        raise LLMTimeoutError("NVIDIA Nemotron timed out") from exc
+    except nvidia.NvidiaError as exc:
+        log.warning("NVIDIA Nemotron unavailable; see NVIDIA provider diagnostics")
+        raise LLMError("NVIDIA Nemotron unavailable") from exc

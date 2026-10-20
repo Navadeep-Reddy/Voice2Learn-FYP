@@ -40,7 +40,7 @@ Do not invent requirements to resolve ambiguity. Prefer the smallest implementat
 - Repeated physical interaction must not be required during the normal demo flow.
 - True mid-sentence interruption/barge-in is **out of scope**.
 - STT uses the **Whisper installation already available locally**. Do not download, train, or fine-tune a model as part of this MVP.
-- Nemotron uses NVIDIA Integrate model `nvidia/nemotron-3-super-120b-a12b` first, with OpenRouter model `nvidia/nemotron-3-super-120b-a12b:free` as the fallback.
+- Nemotron uses only NVIDIA Integrate model `nvidia/nemotron-3-super-120b-a12b`. Per the user's explicit provider revision, do not restore an alternate-provider fallback.
 - Lesson Q&A uses the Nemotron AI tutor with current lesson/scene context.
 - Target: every accepted non-empty STT turn goes through POST /api/intent/classify to Jev through Vercel AI Gateway, using screen and interaction state. Until Pass 8, the endpoint retains the current Nemotron boundary. No frontend exact phrase matching or automatic Nemotron classifier fallback after the switch.
 - Jev chooses one specific allowed action; application code executes it. Conceptual lesson help forwards the original transcript and scene to Nemotron. Quiz grading stays deterministic in the backend; authored check comparison stays separate from proficiency writes.
@@ -62,7 +62,7 @@ Temporary Pre-Review implementations must sit behind small stable interfaces:
 
 - local JSON state -> later replaceable by Supabase
 - local Whisper adapter -> later replaceable by the fine-tuned Whisper deployment
-- NVIDIA-primary/OpenRouter-fallback Nemotron client -> isolated provider integrations behind one LLM boundary
+- NVIDIA-only Nemotron client -> isolated provider integration behind one LLM boundary
 - backend Jev intent classifier -> small replaceable screen/state-aware boundary preserving current HTTP actions during core migration
 - Vercel TypeSafe-compatible Jev client -> isolated backend/app/jev.py, separate from llm.py and Nemotron providers; validation/acceptance/execution owned by application code
 - neural speech endpoint -> existing edge-tts female voice with text-only failure recovery; no browser/system speech or model downloads
@@ -102,9 +102,9 @@ Prefer explicit code over clever abstractions.
 - Keep components small enough to understand, but do not split files mechanically.
 - Use descriptive names over comments that restate the code.
 - Keep all student-facing copy age-appropriate and short.
-- Keep AI Gateway/NVIDIA/OpenRouter keys server-side in ignored backend/.env. Never put them in VITE_ variables, command arguments, logs, screenshots, reports, commits or chat. Use placeholders in examples and sanitize provider errors. Do not ask the user to paste keys into chat.
+- Keep AI Gateway/NVIDIA keys server-side in ignored backend/.env. Never put them in VITE_ variables, command arguments, logs, screenshots, reports, commits or chat. Use placeholders in examples and sanitize provider errors. Do not ask the user to paste keys into chat.
 - Do not expose the quiz answer to the frontend before submission.
-- Invalid model output retries once, then friendly recoverable error. Valid low-confidence Jev output returns unclear without retry. Jev config/auth/access/network/timeout/non-2xx fails without retry/fallback per SPEC. Preserve the existing Nemotron provider fallback independently of the user-requested neural-only speech/text-recovery policy.
+- Invalid model output retries once, then friendly recoverable error. Valid low-confidence Jev output returns unclear without retry. Jev config/auth/access/network/timeout/non-2xx fails without retry/fallback per SPEC. Preserve the user-requested NVIDIA-only Nemotron boundary and neural-only speech/text-recovery policy.
 
 ## Local Whisper Rule
 

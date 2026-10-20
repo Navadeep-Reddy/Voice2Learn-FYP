@@ -87,6 +87,7 @@ export default function App() {
   const tutorPendingRef = useRef(false);
   const tutorSeqRef = useRef(0);
   const quizSeqRef = useRef(0);
+  const quizLoadPendingRef = useRef<number | null>(null);
   const quizManualAdvancingRef = useRef(false);
   const intentPendingRef = useRef(false);
   const intentSeqRef = useRef(0);
@@ -203,6 +204,8 @@ export default function App() {
 
   const loadQuestion = useCallback(
     async (seq: number, index: number) => {
+      if (quizLoadPendingRef.current === seq) return;
+      quizLoadPendingRef.current = seq;
       setQuizLoading(true);
       setQuizError(null);
       setCurrentQuestion(null);
@@ -229,7 +232,9 @@ export default function App() {
             : "My helper is having trouble right now. Try again.";
         setQuizLoading(false);
         setQuizError(friendly);
-        voiceRef.current?.speak(friendly);
+        voiceRef.current?.sayAndShow(friendly);
+      } finally {
+        if (quizLoadPendingRef.current === seq) quizLoadPendingRef.current = null;
       }
     },
     [speakQuestion],
@@ -257,6 +262,8 @@ export default function App() {
   }, [loadQuestion]);
 
   const retryQuizLoad = useCallback(() => {
+    const snap = quizSnapRef.current;
+    if (screenRef.current !== "quiz" || snap.question || snap.quizLoading || !quizErrorRef.current) return;
     void loadQuestion(quizSeqRef.current, quizIndexRef.current);
   }, [loadQuestion]);
 
@@ -472,7 +479,7 @@ export default function App() {
           voice.speak("Lesson notes are closed.");
         } else if (result.action === "read-notes") {
           voice.speak(lessonRef.current?.scenes.map((scene) => `${scene.title}. ${scene.narration}`).join(" ") ?? "Lesson notes are not ready.");
-        } else if (result.action === "retry-question" && quizSnapRef.current.question === null) {
+        } else if (result.action === "retry-question" && quizSnapRef.current.question === null && quizErrorRef.current && !quizSnapRef.current.quizLoading) {
           retryQuizLoad();
         } else if (result.action === "repeat-question") {
           const snap = quizSnapRef.current;
@@ -562,6 +569,9 @@ export default function App() {
       const requestQuizSeq = quizSeqRef.current;
       const requestQuestionId = quizSnapRef.current.question?.question_id ?? null;
       const requestQuestion = quizSnapRef.current.question;
+      const requestQuizLoading = quizSnapRef.current.quizLoading;
+      const requestQuizError = requestQuestion === null && !requestQuizLoading && !!quizErrorRef.current;
+      const requestNotesOpen = notesRef.current;
       const requestCheck = lessonRef.current?.scenes[requestScene]?.check;
       intentPendingRef.current = true;
       intentSeqRef.current += 1;
@@ -585,8 +595,11 @@ export default function App() {
                   id: option.id,
                   text: option.text,
                 })),
+                notes_open: requestNotesOpen,
               }
-            : { transcript: text, screen: requestScreen };
+            : requestScreen === "quiz"
+              ? { transcript: text, screen: requestScreen, quiz_error: requestQuizError, notes_open: requestNotesOpen }
+              : { transcript: text, screen: requestScreen };
       void (async () => {
         try {
           const result = await classifyIntent(body);
@@ -606,7 +619,10 @@ export default function App() {
           if (
             requestScreen === "quiz" &&
             (quizSeqRef.current !== requestQuizSeq ||
-              quizSnapRef.current.question?.question_id !== requestQuestionId)
+              (quizSnapRef.current.question?.question_id ?? null) !== requestQuestionId ||
+              quizSnapRef.current.quizLoading !== requestQuizLoading ||
+              (quizSnapRef.current.question === null && !quizSnapRef.current.quizLoading && !!quizErrorRef.current) !== requestQuizError ||
+              notesRef.current !== requestNotesOpen)
           ) {
             return;
           }
@@ -672,7 +688,7 @@ export default function App() {
   useEffect(() => {
     intentSeqRef.current += 1;
     intentPendingRef.current = false;
-  }, [screen, sceneIndex, currentQuestion?.question_id]);
+  }, [screen, sceneIndex, currentQuestion?.question_id, quizLoading, quizError, notesOpen]);
 
   useEffect(() => {
     if (screen === "lesson" && lesson) {
@@ -794,6 +810,7 @@ export default function App() {
                     <>
                       <h1 className="type-card text-ink">Oh no!</h1>
                       <p className="mt-2 text-base text-muted">{quizError}</p>
+                      <p className="mt-3 text-base font-bold text-brand">Say “try again” to load the question again.</p>
                       <button
                         type="button"
                         onClick={retryQuizLoad}
