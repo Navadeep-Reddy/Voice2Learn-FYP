@@ -96,6 +96,9 @@ NVIDIA_MODEL=nvidia/nemotron-3-super-120b-a12b
 OPENROUTER_API_KEY=
 OPENROUTER_MODEL=nvidia/nemotron-3-super-120b-a12b:free
 VOICE2LEARN_TTS_VOICE=en-US-JennyNeural
+AI_GATEWAY_API_KEY=
+AI_GATEWAY_MODEL=typesafe-ai/jev
+AI_GATEWAY_TIMEOUT_SECONDS=10
 ```
 
 Keep the model identifier configurable rather than hardcoding it.
@@ -186,11 +189,11 @@ After each pass, stop for review before continuing.
 
 This repository is intentionally building a **focused Pre-Review vertical slice**, not the complete final Voice2Learn system.
 
-## Planned Jev Setup — Not Implemented on This Base
+## Isolated Jev Client (Pass 7; Routing Not Switched)
 
-The migration keeps local STT, neural/browser speech, lesson checks, notes, Nemotron tutoring/question generation, and backend quiz grading. Jev will classify intent through Vercel AI Gateway, separate from the existing NVIDIA/OpenRouter LLM boundary.
+An isolated backend client and configuration for Jev through Vercel AI Gateway now exist, separate from the existing NVIDIA/OpenRouter LLM boundary. The current `/api/intent/classify` endpoint still uses Nemotron; switching it is Pass 8 and has not begun. Local STT, neural/browser speech, lesson checks, notes, Nemotron tutoring/question generation, and backend quiz grading remain unchanged.
 
-After Pass 7 adds support, configure these backend-only settings in ignored `backend/.env`:
+Configure these optional backend-only settings in ignored `backend/.env`:
 
 ```env
 AI_GATEWAY_API_KEY=<set privately in backend/.env>
@@ -198,14 +201,14 @@ AI_GATEWAY_MODEL=typesafe-ai/jev
 AI_GATEWAY_TIMEOUT_SECONDS=10
 ```
 
-These are planned variables, not current implemented setup or changes already made to `.env.example`. Never paste keys into chat, print environment/config values, place keys in shell commands/logs, commit them, or expose them through frontend/VITE_ variables. NVIDIA/OpenRouter credentials remain necessary for tutoring and quiz generation. No direct TypeSafe key or local Jev model installation is required. Gateway model/team access must be verified; a catalog listing is not a successful decision.
+The client reads these settings only when explicitly called; it makes no startup network request. Keep the key private in `backend/.env`; never paste it into chat, print environment/config values, place it in shell commands/logs, commit it, or expose it through frontend/VITE_ variables. NVIDIA/OpenRouter credentials remain necessary for tutoring and quiz generation. No direct TypeSafe key or local Jev model installation is required. This implementation has only been checked offline; no live Gateway access, model/team access, or successful Jev decision is claimed.
 
 SPEC Section 16 documents the chosen [Vercel TypeSafe-compatible API](https://vercel.com/docs/ai-gateway/sdks-and-apis/typesafe). No runtime classifier fallback to Nemotron will be added. Failed Jev routing gives a friendly recoverable error on the current screen.
 
 ## Follow-Up Implementation Order
 
 1. Prerequisite R: repair and verify current post-review voice context/state wiring.
-2. Pass 7: isolated Jev client/configuration; keep baseline classification active.
+2. Pass 7: isolated Jev client/configuration; keep baseline classification active (pending review).
 3. Pass 8: switch current actions to state-aware Jev routing.
 4. Pass 9: evaluate the core migration with representative speech and latency evidence.
 5. Pass 10: general scene destinations, in-session resume, repetition and orientation.
