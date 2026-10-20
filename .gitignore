@@ -6,3 +6,6 @@ __pycache__/
 *.pyc
 /backend/data/context.md
 /.dev-server.pids
+
+backend/models/
+.opencode
