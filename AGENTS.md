@@ -2,9 +2,7 @@
 
 ## Project Phase
 
-This repository is currently building the **Voice2Learn Pre-Review MVP**.
-
-This is a one-day-ish vertical slice for demonstration and review. It must feel polished and real, but it must not expand into the full final-year project yet.
+The six-pass **Voice2Learn Pre-Review MVP** baseline is approved. This `main-ish` base includes unapproved post-review work. The authorized follow-up plan is baseline reconciliation, Jev intent routing through Vercel AI Gateway, then the requested general voice navigation. Read `PROGRESS.md` for current state. Keep one focused vertical slice; do not expand curriculum or final-project infrastructure.
 
 ## Source of Truth
 
@@ -12,10 +10,13 @@ Use these files with clear ownership:
 
 - `SPEC.md` — product behavior, data contracts, technical scope, acceptance criteria.
 - `DESIGN.md` — visual language, motion, layout, component styling.
-- `BUILD_PLAN.md` — immutable implementation order and pass boundaries. Never changes to reflect progress.
+- `BUILD_PLAN.md` — fixed implementation order and pass boundaries, including the consolidated post-review prerequisite and Jev/navigation follow-up. Change definitions only for an explicitly authorized plan revision, never merely for progress.
 - `PROGRESS.md` — mutable implementation state: current pass, completed passes, known issues, next action.
 - `README.md` — setup and run instructions.
 - `AGENTS.md` — agent behavior and development constraints.
+- `USER_NAVIGATION.md` — concise lesson-agnostic voice command catalogue; SPEC owns behavior/contracts and PROGRESS owns status.
+
+Keep architecture/API details in SPEC, pass definitions in BUILD_PLAN and evidence in PROGRESS. Do not create separate architecture, API-contract, Jev-plan/progress or branch-workflow files. Former POST_REVIEW_PLAN content is consolidated in BUILD_PLAN Prerequisite R.
 
 If guidance conflicts:
 
@@ -26,7 +27,7 @@ If guidance conflicts:
 5. `PROGRESS.md` governs current state only; it never overrides pass content in `BUILD_PLAN.md`, `SPEC.md`, or `DESIGN.md`.
 6. `README.md` documents the implemented setup and must be updated to match reality.
 
-At the beginning of every coding session: read `PROGRESS.md` before changes, use it to determine the current pass, and never reimplement completed passes unless the user explicitly asks.
+At the beginning of every coding session: read `PROGRESS.md` before changes, then the current BUILD_PLAN pass and relevant SPEC/DESIGN sections. Inspect actual branch/status/diff and preserve existing work. Never reimplement approved passes unless explicitly asked. Committed post-review work or progress on another branch is not approval on this base. Documentation requests do not authorize starting code.
 
 Do not invent requirements to resolve ambiguity. Prefer the smallest implementation consistent with the documents.
 
@@ -41,7 +42,10 @@ Do not invent requirements to resolve ambiguity. Prefer the smallest implementat
 - STT uses the **Whisper installation already available locally**. Do not download, train, or fine-tune a model as part of this MVP.
 - Nemotron uses NVIDIA Integrate model `nvidia/nemotron-3-super-120b-a12b` first, with OpenRouter model `nvidia/nemotron-3-super-120b-a12b:free` as the fallback.
 - Lesson Q&A uses the Nemotron AI tutor with current lesson/scene context.
-- Every non-empty STT transcript must be sent backend-side to Nemotron through the NVIDIA-primary/OpenRouter-fallback boundary for semantic, screen-aware intent classification using the current screen/context; frontend exact phrase matching must not decide voice actions.
+- Target: every accepted non-empty STT turn goes through POST /api/intent/classify to Jev through Vercel AI Gateway, using screen and interaction state. Until Pass 8, the endpoint retains the current Nemotron boundary. No frontend exact phrase matching or automatic Nemotron classifier fallback after the switch.
+- Jev chooses one specific allowed action; application code executes it. Conceptual lesson help forwards the original transcript and scene to Nemotron. Quiz grading stays deterministic in the backend; authored check comparison stays separate from proficiency writes.
+- Preserve check gating, Back-to-Home on the first scene, help, quiz notes, error retry, VAD utterances and neural/browser TTS. Do not claim known incomplete voice wiring works before verification.
+- General commands resolve actual loaded lesson IDs/titles/concepts; no hardcoded lesson topics or invented destinations. Planned jump/resume/pacing/exit actions follow SPEC Section 17 and their own passes. Never bypass checks or reveal/solve quiz answers.
 - Quiz questions are **fully Nemotron-generated**, generated **one at a time**, and are **multiple-choice only**.
 - Quiz grading is deterministic in the backend.
 - Learner proficiency is tracked only for:
@@ -59,7 +63,9 @@ Temporary Pre-Review implementations must sit behind small stable interfaces:
 - local JSON state -> later replaceable by Supabase
 - local Whisper adapter -> later replaceable by the fine-tuned Whisper deployment
 - NVIDIA-primary/OpenRouter-fallback Nemotron client -> isolated provider integrations behind one LLM boundary
-- backend Nemotron intent classifier -> small replaceable semantic routing boundary; frontend must not rely on exact local phrase matching
+- backend Jev intent classifier -> small replaceable screen/state-aware boundary preserving current HTTP actions during core migration
+- Vercel TypeSafe-compatible Jev client -> isolated backend/app/jev.py, separate from llm.py and Nemotron providers; validation/acceptance/execution owned by application code
+- neural speech endpoint -> existing edge-tts with browser speech fallback; no model downloads
 - context builder -> generates `backend/data/context.md` and is reused by lesson Q&A, quiz generation, and intent classification
 - authored lesson JSON -> later replaceable by a larger lesson/content source
 
@@ -90,15 +96,15 @@ Prefer explicit code over clever abstractions.
 
 - Frontend: React + TypeScript + Vite + Tailwind CSS.
 - Backend: Python + FastAPI.
-- Validate Nemotron structured output with Pydantic.
+- Validate Nemotron structured output and Jev response distributions/envelopes with Pydantic. Keep Jev probabilities/confidence/provider metadata backend-only.
 - Never use raw `eval`.
 - Keep provider-specific logic isolated.
 - Keep components small enough to understand, but do not split files mechanically.
 - Use descriptive names over comments that restate the code.
 - Keep all student-facing copy age-appropriate and short.
-- Do not expose secrets or NVIDIA/OpenRouter keys to the frontend.
+- Keep AI Gateway/NVIDIA/OpenRouter keys server-side in ignored backend/.env. Never put them in VITE_ variables, command arguments, logs, screenshots, reports, commits or chat. Use placeholders in examples and sanitize provider errors. Do not ask the user to paste keys into chat.
 - Do not expose the quiz answer to the frontend before submission.
-- Do not silently recover from invalid Nemotron output. Validate, retry once, then return a friendly recoverable error.
+- Invalid model output retries once, then friendly recoverable error. Valid low-confidence Jev output returns unclear without retry. Jev config/auth/access/network/timeout/non-2xx fails without retry/fallback per SPEC. Preserve the existing Nemotron and speech fallback policies independently.
 
 ## Local Whisper Rule
 
@@ -116,13 +122,13 @@ The UI should operate as a simple voice loop:
 
 While TTS is speaking, STT is paused. When TTS finishes, listening may resume automatically.
 
-Every non-empty transcript is classified by the backend Nemotron intent classifier using the current screen/context. The frontend must not decide voice actions with exact local phrase matching.
+Every accepted non-empty transcript is classified backend-side using current screen/state, with Jev in the target architecture. Silence resumes silently. Preserve duplicate/stale-result guards across scene/question/check/notes/phase changes; validate again before execution. The frontend must not decide voice actions by exact phrase matching.
 
-The microphone remains clickable as a fallback control, but the normal demo flow should not require repeated clicks.
+All essential learner actions must be voice-operable after initial browser permission/activation. Visible controls are optional fallbacks, never a required step in the normal learner journey. STT remains paused during speech. Planned pause/resume is between speech turns with listening retained; no wake word or mid-sentence interruption.
 
 ## Pass Discipline
 
-Implement **one pass from `BUILD_PLAN.md` at a time**.
+Implement **one current pass from BUILD_PLAN at a time**, selected by PROGRESS: Prerequisite R, then 7–12. Preserve original Passes 1–6 as approved history. Older branch Jev code is not automatically incorporated or approved.
 
 After each pass:
 
@@ -132,7 +138,7 @@ After each pass:
 4. report any known issue or assumption;
 5. wait for the user's review before starting the next pass.
 
-A pass is not marked completed merely when coding ends. Only after the user approves a pass: update `PROGRESS.md` (mark the approved pass complete, set the next pass current, record known issues and next action), then commit and push the pass implementation plus the progress update. Never commit or push without user approval or an explicit user instruction to do so.
+A pass is not marked completed merely when coding ends. Only after the user approves a pass: update `PROGRESS.md` (mark the approved pass complete, set the next pass current, record known issues and next action), then commit/push the intended pass files and tracker update only as authorized. Preserve known issues and branch-local versus integrated evidence; do not sweep unrelated changes into a commit. Never commit or push without user approval or an explicit user instruction to do so.
 
 Do not continue into the next pass just because it seems convenient.
 
@@ -149,3 +155,10 @@ A feature is done only when:
 - no out-of-scope feature was added.
 
 The goal is a focused, polished Pre-Review MVP — not the final Voice2Learn system.
+
+
+## Parallel Development
+
+Do not infer or implement the friend's unrelated scope. Core Jev work owns `backend/app/jev.py`, `intent.py`, intent-specific context helpers and required backend configuration. Prerequisite R and navigation extension passes explicitly require coordinated frontend/API/type changes; agree on shared edits before concurrent work. Preserve neural TTS, local STT, Nemotron tutoring/generation and authored content unless the current pass calls for a demonstrated fix.
+
+Use SPEC Section 12/17 for shared contracts; modify backend/frontend types and execution together for authorized extensions. Record branch/base and local evidence in PROGRESS. Separate branches in one checkout do not isolate uncommitted changes; prefer separate checkouts for simultaneous work. Do not create/switch branches, merge, commit or push merely because a plan exists. Before an authorized integration inspect overlapping changes and verify the combined voice flow, checks, notes, tutoring, grading, proficiency and error recovery.

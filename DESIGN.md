@@ -413,7 +413,7 @@ Honor `prefers-reduced-motion` by removing non-essential motion and keeping the 
 
 Even though voice is primary:
 
-- every action must also have a visible fallback control;
+- every essential learner action must work by voice after initial microphone activation; visible controls are supplementary fallbacks, never required in the normal flow;
 - touch targets should be at least 48px;
 - maintain good text/background contrast;
 - do not communicate correctness through color alone;
@@ -470,3 +470,14 @@ At wider widths:
 ## 18. Post-Review UI Additions
 
 Keep understanding checks inside the existing lesson screen, below narration, with four large A–D tactile options and concise correct/try-again feedback. Show the forward button disabled until correct; keep Back and tutor access visible. On the quiz, place an unobtrusive Lesson Notes disclosure below the question/options; its compact recap must not obscure the question or fixed microphone. Voice help hints should be short and screen-specific. Preserve the current palette, readable feedback, minimum 48px targets and reduced-motion behavior.
+
+
+## 19. Jev Routing and General Voice Navigation
+
+Jev is an internal routing change: show existing listening/thinking/speaking/retry states, never model labels, confidence scores, API details or provider errors. Keep the current scene/question visible while classification or tutoring is pending. Use short spoken boundary prompts when a check blocks forward movement or a destination is unavailable; do not silently navigate.
+
+Use actual loaded lesson titles and scene positions in hints rather than hardcoded topics or counts for general commands. Keep help short and appropriate to current state. Navigation extensions reuse the existing four screens; no new dashboard, settings screen or chapter catalogue.
+
+During Pass 11, graded quiz feedback stays visible until spoken Continue; show a concise “Say continue or repeat feedback” hint. Paused state says “Paused — say resume”; retain listening so resume is possible. Quiz exit confirmation uses a short inline prompt (“Leave this quiz? Say yes or no”) and optional fallback controls. Cancel restores the same question and notes. No voice mid-sentence interruption is implied. Keep microphone space, contrast, reduced motion and 48px targets.
+
+These are target presentation requirements. PROGRESS records which behaviors are implemented; SPEC owns action/state semantics.

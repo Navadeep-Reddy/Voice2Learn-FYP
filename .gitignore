@@ -8,4 +8,4 @@ __pycache__/
 /.dev-server.pids
 
 backend/models/
-.opencode
+.opencode/

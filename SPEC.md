@@ -1,6 +1,6 @@
 # Voice2Learn — Pre-Review MVP Specification
 
-**Status:** Implementation source of truth
+**Status:** Product/contract source of truth; includes planned Jev migration. Read `PROGRESS.md` for actual implementation and approval state.
 **Phase:** Pre-Review MVP
 **Scope:** One polished vertical slice
 
@@ -33,7 +33,7 @@ The demo should prove:
 - One chapter: **Multiplication & Division**
 - One lesson: **Groups and Sharing**
 - Five authored lesson scenes
-- Voice navigation
+- Voice navigation and authored scene understanding checks
 - Contextual lesson Q&A with Nemotron
 - Local Whisper STT
 - Neural TTS with browser speech synthesis fallback
@@ -44,7 +44,9 @@ The demo should prove:
   - multiplication
   - division
 - Local JSON persistence
-- Results/progress screen
+- Results/progress screen and authored lesson recap during quiz
+- Planned Jev routing through Vercel AI Gateway
+- Planned lesson-agnostic voice navigation described in Sections 16–17
 
 ### Out of Scope
 
@@ -82,17 +84,17 @@ The demo should prove:
 ### AI / Voice
 
 - STT: user's existing local Whisper installation
+- Target intent routing: Jev through Vercel AI Gateway; current baseline classification still uses Nemotron until Pass 8.
 - Tutor + question generation: Nemotron through NVIDIA Integrate first
   (`nvidia/nemotron-3-super-120b-a12b`), with OpenRouter fallback
   (`nvidia/nemotron-3-super-120b-a12b:free`)
 - TTS: backend neural speech (`edge-tts`, network required) with browser `speechSynthesis` fallback
 
-The frontend must never call NVIDIA Integrate or OpenRouter directly. Backend
-Nemotron access uses NVIDIA Integrate as primary and OpenRouter as fallback.
+The frontend calls only the application backend. Nemotron access uses NVIDIA Integrate as primary and OpenRouter as fallback through `backend/app/llm.py`. Jev has its own backend client and key; its failures do not fall back to Nemotron. Neural TTS and browser TTS retain their existing fallback behavior.
 
 ## 5. Screens
 
-The MVP has four primary screens. The post-review check/recap voice actions in Section 15 extend the original screen intents below.
+The MVP has four primary screens. Section 7.3 lists the full current action vocabulary, including checks and notes; Section 12 defines its contract. Section 15 records post-review behavior. Sections 16–17 define the planned migration and navigation extensions. The lists below describe the current baseline actions; planned extensions are in Section 17.
 
 ### 5.1 Home
 
@@ -110,7 +112,8 @@ Show:
 Required voice intent (resolved semantically by `POST /api/intent/classify`, not by frontend exact phrase matching):
 
 - `start lesson` and similar imperfect variants such as `start`, `let's learn`, `multiplication and division` -> `start-lesson`
-- anything else non-empty -> `unclear` (stay on Home and ask the child to repeat)
+- `help` explains available voice actions
+- any other unsupported non-empty request -> `unclear` (stay on Home and ask the child to repeat)
 
 Click/tap on the lesson card is a fallback.
 
@@ -131,12 +134,15 @@ Show:
 Required voice intents (resolved semantically by `POST /api/intent/classify`, not by frontend exact phrase matching):
 
 - navigation: `next` (including spoken variants such as `go next` and `continue`, plus imperfect STT variants), `back` (including `go back`)
-- `repeat` (repeat the current scene narration)
-- `start-quiz` (spoken as `start quiz` / `quiz me`), allowed only on the final scene
+- `home` returns Home; `back` from the first scene also returns Home
+- `select-check` with A/B/C/D answers the current check; correctness unlocks forward movement without updating proficiency
+- `help` explains available commands
+- `repeat` replays narration plus the current check/options
+- `start-quiz` (spoken as `start quiz` / `quiz me`), allowed only on the final scene after its check is passed
 - free-form lesson question -> `ask-question`
-- anything else non-empty that is neither navigation nor a lesson question -> `unclear`
+- any other unsupported non-empty request -> `unclear`
 
-On the final scene, show a `Start Quiz` fallback button and prompt the child to say `start quiz`.
+Show the authored check and A/B/C/D options after narration. Disable forward controls until its check is passed. On the final scene, enable the Start Quiz fallback and spoken prompt only after the check is passed.
 
 When a transcript is classified as `ask-question`, send the original transcript to the tutor endpoint (`POST /api/tutor/ask`). The classifier response never carries lesson question content; the frontend uses the original transcript.
 
@@ -158,11 +164,14 @@ Required voice intents (resolved semantically by `POST /api/intent/classify`, no
 
 - `select-option` with `option` A/B/C/D (spoken as `A`, `B`, `C`, `D`, including imperfect variants such as `option A`, `bee`, `see`)
 - `repeat-question` (spoken as `repeat question`; repeat the visible question and options)
-- anything else non-empty -> `unclear`
+- `open-notes`, `close-notes`, `read-notes` access the authored recap without losing the question
+- `retry-question` retries a failed question load only
+- `help` explains available commands
+- any other unsupported non-empty request -> `unclear`
 
 Click/tap on an option is a fallback.
 
-Generate the next question only after the previous answer has been graded and learner state has been updated.
+Generate the next question only after grading and the learner-state update. Baseline code advances automatically after feedback speech. Pass 11 changes this to a listening feedback phase awaiting Continue; until then, do not claim voice-controlled quiz pacing exists.
 
 ### 5.4 Results
 
@@ -181,7 +190,8 @@ Required voice intents (resolved semantically by `POST /api/intent/classify`, no
 
 - `review-lesson` (spoken as `review lesson`)
 - `retake-quiz` (spoken as `take quiz again`)
-- anything else non-empty -> `unclear` (stay on Results and ask the child to repeat)
+- `help` explains available commands
+- any other unsupported non-empty request -> `unclear` (stay on Results and ask the child to repeat)
 
 ## 6. Authored Lesson: Groups and Sharing
 
@@ -300,22 +310,25 @@ True barge-in while the system is speaking is not required.
 
 ### 7.3 Semantic Intent Classification
 
-Every non-empty STT transcript must be sent to `POST /api/intent/classify` for backend Nemotron semantic, screen-aware intent classification through the NVIDIA-primary/OpenRouter-fallback boundary. Frontend exact phrase matching must not decide voice actions.
+Target: every accepted non-empty STT transcript goes to `POST /api/intent/classify`, where Jev selects one action allowed by the current screen and interaction state. Until Pass 8, this endpoint uses the current Nemotron NVIDIA-primary/OpenRouter-fallback boundary. No frontend exact phrase matching decides actions. Empty turns resume silently.
 
-The classifier maps imperfect STT semantically to only actions allowed on the current screen (including the post-review additions in Section 15):
+Preserve the current action names during migration:
 
-- home: `start-lesson`, `unclear`
-- lesson: `next`, `back`, `repeat`, `start-quiz` (final scene only), `ask-question`, `unclear` (spoken `continue` maps semantically to `next`, never a separate action)
-- quiz: `select-option` with `option` A/B/C/D, `repeat-question`, `unclear`
-- results: `review-lesson`, `retake-quiz`, `unclear`
+| Screen | Actions | State rules |
+| --- | --- | --- |
+| Home | `start-lesson`, `help`, `unclear` | Start the available lesson at its beginning. |
+| Lesson | `next`, `back`, `home`, `repeat`, `ask-question`, `select-check`, `help`, `unclear` | A correct understanding check unlocks forward movement. Back from the first scene returns Home. Repeat includes narration and the current check/options. |
+| Lesson, final scene | `start-quiz` | Requires final-scene check completion. |
+| Quiz | `select-option`, `repeat-question`, `open-notes`, `close-notes`, `read-notes`, `retry-question`, `help`, `unclear` | Select only an unanswered question; retry only a failed question load; offer open/close based on notes state. Notes do not discard or replace the question. |
+| Results | `review-lesson`, `retake-quiz`, `help`, `unclear` | Review restarts lesson checks for a new visit; retake starts a new quiz without resetting proficiency. |
 
-When the action is `ask-question`, the frontend calls the existing tutor endpoint (`POST /api/tutor/ask`) with the original transcript. The classifier response never sends or rewrites lesson question content.
+`select-check` and `select-option` require option A/B/C/D. Other actions have `option: null`. `help` means interface guidance; `ask-question` means conceptual lesson help. The latter forwards the original transcript and scene to Nemotron, displays/speaks its answer, and stays on the same scene.
 
-Quiz classification may receive only the visible sanitized question and options (`quiz_question`, `quiz_options`); it must never receive the hidden correct answer or explanation.
+Jev uses one screen/state-specific Choice. Internal `check-A/B/C/D` and `select-A/B/C/D` choices normalize to the existing public selection actions. Neither hidden quiz answers/explanations nor authored check correct-option/hints belong in classification context. Quiz classification interprets the learner's selection, never solves the question.
 
-Empty transcripts and silence are not sent to the LLM. The app resumes listening silently without showing an error.
+Interpret paraphrases and imperfect STT semantically. “Next unit” refers to the next existing lesson scene. Negated commands must not execute. “Explain before moving on” requests help without queuing navigation. Unsupported early quiz start or unavailable destinations return `unclear`. At a blocked forward transition, explain that the quick check must be answered first; never silently mark it passed. Subject tutoring during an active quiz remains unavailable; authored notes remain available.
 
-Validate classifier output strictly with Pydantic. On invalid model output, retry once, then return a friendly recoverable error that keeps the child on the current screen.
+Valid low-confidence decisions return `unclear` without mutation or retry. Invalid provider output retries once; other failures follow Section 16. Classification itself never changes navigation, answers, or learner data.
 
 ## 8. Tutor Q&A
 
@@ -540,11 +553,11 @@ It produces concise markdown-formatted context for:
 - quiz generation;
 - semantic intent classification.
 
-Before each Nemotron call, including every intent-classifier provider attempt, overwrite a generated runtime file at:
+Before each tutor/quiz model call and each intent-classifier provider attempt, overwrite a generated runtime file at:
 
 `backend/data/context.md`
 
-`learner_state.json` and `lesson.json` remain the sources of truth. `context.md` is generated context for Nemotron and must never be edited manually.
+`learner_state.json` and `lesson.json` remain the sources of truth. `context.md` is generated diagnostic context and must never be edited manually. Each request sends its own in-memory context, never rereads that shared file. Keep tutor/quiz context interfaces intact when adjusting intent context. Build Jev context from visible screen data and validated state; do not copy whole lesson objects containing check answers or recent grading data into it.
 
 Do not scatter prompt/context construction across route handlers.
 
@@ -575,41 +588,43 @@ Uses the local Whisper adapter.
 
 ### `POST /api/intent/classify`
 
-Classifies every non-empty STT transcript semantically with Nemotron through
-the NVIDIA-primary/OpenRouter-fallback boundary, using the current
-screen/context.
+Existing HTTP boundary, switching from Nemotron to Jev in Pass 8. Preserve the current response shape during that pass.
 
-Input:
+Request fields:
 
-```json
-{
-  "transcript": "go next please",
-  "screen": "lesson",
-  "scene_id": "scene-2",
-  "quiz_question": null,
-  "quiz_options": null
-}
-```
+| Field | Meaning / validation |
+| --- | --- |
+| `transcript` | Required nonblank original STT text. |
+| `screen` | `home`, `lesson`, `quiz`, or `results`. |
+| `scene_id` | Required valid lesson scene on Lesson; absent/null elsewhere. Resolve title, position and final status from authored data. |
+| `check_question`, `check_options` | Paired visible check text/options for an active lesson check. Options contain A/B/C/D once each; validate against the scene. Never include correct option or hint. |
+| `quiz_question`, `quiz_options` | Paired visible unanswered quiz question/options; no answer or grading explanation. A/B/C/D once each. |
+| `notes_open` | Existing boolean, default false; true only on Quiz. |
+| `quiz_error` | Existing boolean, default false; true only for failed question loading without a question/options. |
 
-- `transcript` (string, required): the raw non-empty STT text.
-- `screen` (string, required): `home`, `lesson`, `quiz`, or `results`.
-- `scene_id` (string or null): current lesson scene when `screen` is `lesson`.
-- `quiz_question` / `quiz_options` (present only when `screen` is `quiz`): the visible sanitized question text and options. Never send the hidden correct answer or explanation.
+The baseline backend accepts these fields, but the current frontend omits check/notes/error context (see `PROGRESS.md`). Prerequisite R repairs that wiring before migration.
 
-Output:
+Planned optional state additions in Prerequisite R, implemented together in Python and TypeScript: `check_passed` (lesson boolean, default false) and `quiz_phase` (`loading`, `answering`, `grading`, `feedback`, `error`; quiz only). Require internally consistent combinations; loading/grading/feedback do not submit answers. For feedback, omit old question/options from classification and expose only actions appropriate to feedback. `quiz_phase` defaults to inferred answering/error for legacy requests. Do not treat absence of context as proof that an action is safe. The app revalidates all transitions against its live state.
+
+Examples after prerequisite wiring:
 
 ```json
-{
-  "action": "next",
-  "option": null
-}
+{"transcript":"go next","screen":"lesson","scene_id":"scene-2","check_passed":true}
 ```
 
-- `action` is restricted to the actions allowed on the given `screen` (see Section 7.3).
-- `option` carries `A`, `B`, `C`, or `D` only when the action is `select-option`; otherwise null.
-- The response never carries lesson question content; when the action is `ask-question`, the frontend sends the original transcript to `POST /api/tutor/ask`.
+```json
+{"transcript":"try loading again","screen":"quiz","quiz_error":true,"quiz_phase":"error","notes_open":false}
+```
 
-Validate strictly with Pydantic, retry once on invalid model output, then return a friendly recoverable error.
+Current response, preserved through Pass 9:
+
+```json
+{"action":"select-check","option":"B"}
+```
+
+`option` is non-null only for `select-option` or `select-check`. No rewritten transcript, category, confidence, probabilities or provider metadata enters the public result. Unknown lesson scene: 404. Invalid input: 422. Provider failure: 502 with `{"detail":"My helper is having trouble right now. Try again."}`. Low confidence: 200 with `{"action":"unclear","option":null}`.
+
+The future Pass 10 navigation contract adds nullable `target_scene_id`, documented in Section 17. Implement coordinated backend/frontend changes in that pass; do not add speculative payload fields earlier.
 
 ### `POST /api/tutor/ask`
 
@@ -661,7 +676,11 @@ Output:
 
 ### `POST /api/demo/reset`
 
-Restores the demo learner to the initial state.
+Restores the demo learner to the initial state and clears the active quiz question. Presenter utility, not a casual student voice command.
+
+### `POST /api/tts/speak`
+
+Existing neural TTS boundary. Input `{ "text": "..." }` (1–2500 characters); returns `audio/mpeg`. Uses configured `VOICE2LEARN_TTS_VOICE`, default `en-US-JennyNeural`, via networked `edge-tts`. Unavailable/failed synthesis returns a friendly 503; frontend falls back to browser speech. Cancel stale fetch/audio on navigation, suppress recording during either speech path, and resume listening after completion. Do not send API credentials to the frontend.
 
 ## 13. Error Behavior
 
@@ -671,7 +690,7 @@ Examples:
 
 - Whisper cannot transcribe -> show `I didn't catch that. Try again.`
 - command is unclear -> stay on the current screen and ask the child to repeat
-- NVIDIA-primary and OpenRouter-fallback error -> show `My helper is having trouble right now. Try again.`
+- Jev classifier error, or both Nemotron providers failing for tutoring/generation -> show `My helper is having trouble right now. Try again.`
 - invalid LLM output after retry -> do not mutate state; allow retry
 - microphone unavailable -> keep click/tap fallback controls usable
 
@@ -698,10 +717,76 @@ The Pre-Review MVP is complete when all of the following work:
 15. The application visually follows `DESIGN.md`.
 16. No out-of-scope system was introduced.
 
-## 15. Post-Review MVP Requirements (user-requested)
+## 15. Post-Review Baseline to Preserve
 
 The five existing lesson scenes each include one authored, four-option understanding check, stored with the lesson JSON. Narration is followed by a short check question. A correct response is required before moving forward or starting the quiz; wrong responses receive a brief hint and may be retried without changing proficiency. Going backward and asking the contextual tutor remain available, and completed checks remain complete during the current lesson visit. Spoken answers use backend semantic intent classification with visible question/options; no frontend phrase matching. On scene 1, spoken Back returns Home. Help/repeat prompts describe the available actions without a new screen.
 
 During the quiz, an expandable authored lesson recap is viewable and readable aloud by voice, while the current question and progress remain unchanged. Quiz answers remain hidden before submission; recap content is the public lesson narration only. Essential voice operations across screens include help, repetition, lesson navigation, check selection/retry, quiz recap open/close/read, answering, retry on load error, and results navigation. Invalid commands stay on the current screen with a friendly prompt.
 
 TTS prefers a configurable neural speech voice through a small backend endpoint; if unavailable it falls back to browser speech synthesis. Spoken audio must pause STT and resume listening afterward, with cancellation on navigation. Neural TTS requires network availability; it must not download a local model or expose credentials. The original five-question Nemotron quiz, four screens, and proficiency rules remain unchanged.
+
+
+## 16. Jev Architecture and Provider Boundary (planned)
+
+### End-to-end flow
+
+```text
+Microphone → browser speech/silence detection → complete utterance
+→ local Whisper → transcript + screen/state → /api/intent/classify
+→ backend Jev Choice through Vercel AI Gateway → validated action JSON
+  → navigation / repeat / help / checks / notes: application code
+  → ask-question: ORIGINAL transcript + scene → Nemotron tutor → answer
+  → select-option: deterministic backend quiz grading → learner JSON
+→ neural TTS (browser speech fallback) → automatic listening resume
+```
+
+Jev selects the specific action in one call. Do not first classify navigation versus learning and then make a second dependent model call to identify navigation. Navigation never needs Nemotron. Nemotron remains the tutor and one-at-a-time quiz generator through the existing NVIDIA/OpenRouter boundary. Authored lesson checks remain deterministically compared in application code, without quiz proficiency writes; do not claim they are backend graded today.
+
+### Provider integration
+
+Use `backend/app/jev.py` with existing async `httpx`, typed Pydantic request/response models, and backend-only settings. Chosen transport: Vercel's TypeSafe-compatible HTTP API, not direct TypeSafe hosting or OpenRouter's decision endpoint. Configuration: `AI_GATEWAY_API_KEY`, `AI_GATEWAY_MODEL` default `typesafe-ai/jev`, `AI_GATEWAY_TIMEOUT_SECONDS` default 10, finite positive maximum 30. Base `https://ai-gateway.vercel.sh/typesafe`; POST `/v1/systemone`, optional diagnostic GET `/v1/models`; bearer Gateway key. Confirm official format at implementation time. No SDK, local Jev weight download, training, startup network call, or Gateway decision/model fallback is required. Missing keys fail only the requesting feature; basic content startup remains available.
+
+Official provider references (checked 2026-10-20): [Vercel TypeSafe-compatible API](https://vercel.com/docs/ai-gateway/sdks-and-apis/typesafe), [Jev model](https://vercel.com/ai-gateway/models/jev), [TypeSafe Choice](https://docs.typesafe.ai/primitives/choice). Catalog listing does not establish key/team access. Verify a real decision before claiming live operation; echoed model aliases do not prove the resolved version.
+
+### Decision validation and recovery
+
+Validate the response envelope, selected offered choice, exact probability keys, finite 0..1 values, distribution sum with explicit tolerance, confidence bounds and selected/max-probability consistency. A tied/ambiguous maximum is uncertainty (unclear), not a reason to retry for a preferred decision. Optional Gateway metadata must be typed without requiring fields that may be omitted/null. Application code owns normalization, state validation and acceptance. Use named conservative provisional thresholds; evaluate navigation and selections separately, with stricter selection acceptance if justified. Jev confidence is not an accuracy guarantee.
+
+- Valid low confidence or valid ambiguity: return `unclear`; no retry to force a choice.
+- Invalid provider JSON/schema/distribution: retry once with rebuilt context, then friendly 502. Maximum two provider attempts per turn.
+- Missing configuration, authentication/access failure, timeout, network or non-success response: friendly 502, no retry or fallback. Never expose raw bodies, keys, headers, prompts or traces to students.
+- Keep provider integration isolated from `llm.py`, `nvidia.py`, `openrouter.py`, tutor and quiz generation.
+- Keep duplicate guards and stale-result guards. Discard intent responses if screen, scene, question, check completion, notes state, phase or confirmation state changed before execution. Recheck state before all side effects.
+- Record classifier latency separately from VAD, Whisper, tutor, TTS and total turn latency. Do not promise a speedup before comparable measurements.
+
+## 17. Lesson-Agnostic Voice Navigation Extensions (planned after core migration)
+
+`USER_NAVIGATION.md` is a concise command list. This section owns semantics/contracts. The commands use the currently loaded lesson's actual scene IDs, titles, order and concepts; no hardcoded topic names, scene count, new curriculum or generalized lesson engine. Current MVP scope stays one lesson. Additional commands are not live until their planned passes are approved.
+
+### Pass 10: destinations, resume, repetition and orientation
+
+Add `restart-lesson`, `jump-scene`, `resume-lesson`, `return-scene`, `repeat-tutor-answer`, `read-position`, `read-progress`, and `repeat-results`. Reuse existing `home` and `help` names rather than adding synonyms as new actions.
+
+- `home`: extend to Results; Quiz uses the confirmed-exit flow in Pass 11. Preserve proficiency.
+- `restart-lesson`: Lesson; restart at first scene, clear checks for the new visit, preserve proficiency.
+- `jump-scene`: Lesson; resolve an existing number/title/topic/beginning/end to one scene. For a forward jump, every intervening scene's check must be passed; otherwise explain the first blocking check. Backward jumps remain allowed. Jumping never marks checks complete or starts a quiz.
+- `resume-lesson`: Home only with a saved in-session lesson position. Restore that visit's scene and check completions. Starting anew and Review Lesson reset visit checks. Resume survives leaving for Home, not browser reload; no persistence schema change in this scope.
+- `return-scene`: Lesson after a direct jump; return to the saved pre-jump scene, subject to the same forward check gating. Store one previous jump origin, not browser-wide history.
+- `repeat-tutor-answer`: Lesson only when an answer exists for this scene; replay it without a new LLM call. Do not confuse with scene narration.
+- `read-position`: all screens; speak current screen and scene/question position as applicable.
+- `read-progress`: Home/Results; read available proficiency. `repeat-results`: Results; repeat current score and encouragement. Do not fabricate missing results/history.
+
+Pass 10 result schema: `{ "action": "jump-scene", "option": null, "target_scene_id": "scene-3" }`. Return null target for other actions; existing action/option rules remain. Jev offers one internal `jump:<scene_id>` choice per existing lesson destination and normalizes it to `jump-scene` plus target; no second model call or free-form invented destination. Unknown or ambiguous destinations return `unclear`; a known destination blocked by an incomplete check produces a gate explanation without movement. State additions: optional `resume_scene_id`, `resume_passed_scene_ids` on Home; `passed_scene_ids`, `return_scene_id`, `tutor_answer_available` on Lesson; validate IDs against authored data and avoid passing answer text. These are application-session context, not authenticated progress or permission proofs.
+
+### Pass 11: pacing, feedback and exit
+
+Add `pause`, `resume`, `continue-quiz`, `repeat-feedback`, `exit-quiz`, `confirm-exit`, `cancel-exit`. No new screens/endpoints are needed.
+
+- Pause is accepted between speech turns on Lesson or an unanswered Quiz; preserve the task and keep listening for allowed resume/help/exit requests. It does not disable the microphone or enable barge-in. Do not claim an utterance during TTS can pause speech.
+- While paused, resume returns to the underlying phase without selecting an answer or advancing. “Continue” maps to resume when paused, next on an unpaused lesson, and continue-quiz during graded quiz feedback.
+- Replace automatic quiz advancement with a feedback phase that resumes listening. `continue-quiz` loads the next question or opens Results after the last grade. `repeat-feedback` replays the stored explanation without regrading or making an LLM call. Grading/proficiency writes still happen once at submission, before feedback.
+- `exit-quiz` (including “Go home” on Quiz) enters spoken confirmation from stable answering/feedback/error/paused states, not during grading/loading. Confirm exits to Home and abandons the unfinished attempt without rolling back already persisted grades. Cancel restores the exact prior phase/question/notes state. Retake begins a fresh attempt; no saved quiz resume.
+- Add request state `paused` and `exit_confirmation_pending` (quiz), default false; while confirming, offer confirm/cancel/help/unclear only. Snapshot the prior local state for cancel, prevent stale responses and duplicate actions. Backend validates combinations; app owns all state effects.
+- Reuse `retry-question` for failed quiz generation. Generic “Try again” resolves only to a supported safe retry in the current error state; do not introduce automatic ambiguous tutor/grading retries or duplicate writes. Incorrect lesson checks simply accept another selection.
+
+Commands unavailable in a state return `unclear` or a short boundary explanation. No quiz skipping, editing graded answers, hints that reveal answers, cross-chapter navigation, voice Reset Demo or mid-sentence interruption is added.
