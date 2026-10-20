@@ -2,7 +2,7 @@
 
 Voice2Learn is a voice-first interactive mathematics learning application for children who may have difficulty using conventional physical input.
 
-The **Pre-Review MVP** contains one Multiplication & Division lesson, contextual tutoring, a five-question Nemotron quiz and JSON proficiency tracking. This `main-ish` base adds authored lesson checks, quiz notes, speech-boundary capture and neural speech. Post-review voice wiring still needs reconciliation/review; Jev and broader voice navigation are planned, not live. See PROGRESS for actual state.
+The **Pre-Review MVP** contains one Multiplication & Division lesson, contextual tutoring, a five-question Nemotron quiz and JSON proficiency tracking. This `jev` branch adds authored lesson checks, quiz notes, speech-boundary capture and neural speech. Post-review voice wiring is implemented and pending review/live browser verification; Jev and broader voice navigation are planned, not live. See PROGRESS for actual state.
 
 ## Read First
 
@@ -171,10 +171,10 @@ proficiency, no attempts) and clears the active quiz question.
 1. Open Voice2Learn.
 2. Activate microphone permission once.
 3. Say `start lesson`.
-4. Answer each scene’s quick check to unlock forward movement; navigate by voice (known wiring repair remains pending).
+4. Answer each scene’s quick check to unlock forward movement; navigate by voice (wiring implemented, pending review/live browser verification).
 5. Ask a question about the current scene.
 6. Finish the final check and say start quiz.
-7. Complete five Nemotron-generated MCQs by voice; use lesson notes/repetition as needed after baseline wiring is repaired.
+7. Complete five Nemotron-generated MCQs by voice; use lesson notes/repetition (pending review/live browser verification).
 8. Show the updated multiplication/division proficiency.
 9. Review the lesson or take the quiz again.
 

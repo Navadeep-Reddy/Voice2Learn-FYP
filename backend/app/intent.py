@@ -104,6 +104,8 @@ class IntentClassifyRequest(BaseModel):
     check_options: list[IntentQuizOption] | None = None
     notes_open: bool = False
     quiz_error: bool = False
+    check_passed: bool = False
+    quiz_phase: Literal["loading", "answering", "grading", "feedback", "error"] | None = None
 
     @field_validator("transcript")
     @classmethod
@@ -123,19 +125,37 @@ class IntentClassifyRequest(BaseModel):
                 raise ValueError("check question and options are required together")
             if self.check_options is not None and (not self.check_question or sorted(o.id for o in self.check_options) != ["A", "B", "C", "D"]):
                 raise ValueError("invalid check context")
+            if self.quiz_phase is not None or self.check_passed and self.check_question is None:
+                raise ValueError("invalid lesson state")
         elif self.screen == "quiz":
-            if self.scene_id is not None or self.check_question is not None or self.check_options is not None:
+            if self.scene_id is not None or self.check_question is not None or self.check_options is not None or self.check_passed:
                 raise ValueError("lesson context is only allowed for lesson")
-            if self.quiz_error and (self.quiz_question is not None or self.quiz_options is not None):
-                raise ValueError("failed quiz question must not include options")
-            if not self.quiz_error and not (self.quiz_question or "").strip():
-                raise ValueError("quiz_question is required for quiz")
-            if self.quiz_options is None and not self.quiz_error:
-                raise ValueError("quiz_options is required for quiz")
+            phase = self.quiz_phase
+            if phase is None:
+                if self.quiz_error:
+                    phase = "error"
+                elif self.quiz_question and self.quiz_options is not None:
+                    phase = "answering"
+                else:
+                    raise ValueError("quiz phase or valid legacy context is required")
+                object.__setattr__(self, "quiz_phase", phase)
+            if self.quiz_error != (phase == "error"):
+                raise ValueError("quiz_error must match error phase")
+            if phase in {"loading", "error"} and self.notes_open:
+                raise ValueError("notes are unavailable without a question")
+            if phase == "error":
+                if self.quiz_question is not None or self.quiz_options is not None or self.notes_open:
+                    raise ValueError("error phase cannot include question or notes")
+            elif phase == "answering":
+                if not (self.quiz_question or "").strip() or self.quiz_options is None:
+                    raise ValueError("answering requires question and options")
+            elif phase in {"loading", "grading", "feedback"}:
+                if self.quiz_question is not None or self.quiz_options is not None:
+                    raise ValueError("phase must not include question context")
             if self.quiz_options is not None and len(self.quiz_options) != 4:
                 raise ValueError("quiz_options must contain exactly 4 options")
-            ids = sorted(option.id for option in (self.quiz_options or [])) if not self.quiz_error else ["A", "B", "C", "D"]
-            if ids != ["A", "B", "C", "D"]:
+            ids = sorted(option.id for option in self.quiz_options) if self.quiz_options is not None else []
+            if self.quiz_options is not None and ids != ["A", "B", "C", "D"]:
                 raise ValueError("quiz_options must contain exactly A/B/C/D once each")
             for option in (self.quiz_options or []):
                 if not option.text.strip():
@@ -145,6 +165,8 @@ class IntentClassifyRequest(BaseModel):
                 raise ValueError("context is only allowed on its screen")
             if self.quiz_question is not None or self.quiz_options is not None:
                 raise ValueError("quiz context is only allowed for quiz")
+            if self.check_passed or self.quiz_phase is not None:
+                raise ValueError("state context is only allowed on its screen")
         return self
 
 
@@ -162,8 +184,6 @@ class IntentModelOutput(BaseModel):
 
 def allowed_actions_for(screen: str, is_final_scene: bool) -> list[str]:
     actions = set(ALLOWED_ACTIONS[screen])
-    if screen == "lesson" and not is_final_scene:
-        actions.discard("start-quiz")
     return sorted(actions)
 
 
@@ -222,19 +242,28 @@ async def classify_intent(body: IntentClassifyRequest) -> IntentClassifyResponse
 
     allowed = allowed_actions_for(body.screen, is_final)
     if body.screen == "lesson":
+        passed = body.check_passed
         if body.check_question is None:
             allowed.remove("select-check")
         elif scene and (body.check_question != scene.check.question or [(o.id, o.text) for o in body.check_options or []] != [(o.id, o.text) for o in scene.check.options]):
             raise HTTPException(status_code=422, detail="Invalid check context.")
+        if passed:
+            allowed.remove("select-check")
+        else:
+            allowed.remove("next")
+            allowed.remove("start-quiz")
+        if not is_final:
+            allowed.remove("start-quiz")
     if body.screen == "quiz":
-        if body.quiz_error:
-            allowed = [a for a in allowed if a not in {"select-option", "repeat-question"}]
-        else:
+        phase = body.quiz_phase
+        if phase != "error":
             allowed.remove("retry-question")
-        if body.notes_open:
-            allowed.remove("open-notes")
+        if phase != "answering":
+            allowed = [a for a in allowed if a not in {"select-option", "repeat-question"}]
+        if phase not in {"answering", "grading", "feedback"}:
+            allowed = [a for a in allowed if a not in {"open-notes", "close-notes", "read-notes"}]
         else:
-            allowed.remove("close-notes")
+            allowed.remove("close-notes" if not body.notes_open else "open-notes")
 
     last_error: Exception | None = None
     for _ in range(2):
@@ -255,6 +284,8 @@ async def classify_intent(body: IntentClassifyRequest) -> IntentClassifyResponse
             ([{"id": o.id, "text": o.text} for o in body.check_options] if body.check_options else None),
             body.notes_open,
             body.quiz_error,
+            body.check_passed,
+            body.quiz_phase,
         )
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},

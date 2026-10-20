@@ -2,9 +2,9 @@
 
 ## Current pass
 
-**Prerequisite R — Reconcile the Existing Post-Review Baseline (implementation present in part; repair and verification pending; not approved).**
+**Pass 7 — Isolated Vercel Jev Client and Configuration (started/authorized; not completed or approved).**
 
-Documentation has been rebased onto the current `main-ish` implementation for the Jev migration. This is a documentation-only update; it starts no implementation pass. Follow the fixed order in `BUILD_PLAN.md` and stop for review after each pass.
+Prerequisite R was explicitly approved on 2026-10-20. Follow the fixed order in `BUILD_PLAN.md`; implement Pass 7 only and stop for review before any later pass.
 
 ## Approved history
 
@@ -17,8 +17,8 @@ Documentation has been rebased onto the current `main-ish` implementation for th
 
 ## Follow-up sequence
 
-- [ ] Prerequisite R — existing post-review reconciliation; pending, not approved
-- [ ] Pass 7 — isolated Vercel Jev client/config; not started on this base
+- [x] Prerequisite R — existing post-review reconciliation; approved 2026-10-20
+- [ ] Pass 7 — isolated Vercel Jev client/config; started/authorized, not completed or approved
 - [ ] Pass 8 — current screen/state-aware Jev routing; not started
 - [ ] Pass 9 — core migration evaluation/review; not started
 - [ ] Pass 10 — general voice destinations/resume/orientation; not started
@@ -29,16 +29,17 @@ Code present or committed does not establish approval. Earlier Jev branch implem
 
 ## Current implementation, inspected 2026-10-20
 
-- Branch `main-ish`, inspected HEAD `8686105` (same as locally recorded `origin/main-ish`); post-review implementation commit `b24ba1e`. No remote fetch, branch change or merge performed.
+- At handoff for this implementation, branch `jev`, HEAD `5ce5520`; Prerequisite R implementation changes are local. No branch change, commit or push performed during Prerequisite R verification.
 - Public intent classification is still Nemotron through `llm.py`: NVIDIA Integrate primary, OpenRouter fallback. No `backend/app/jev.py` exists on this base.
 - Existing code includes authored checks in lesson JSON/UI, local comparison/unlock in App, help/Home actions, quiz recap actions and error retry support, neural edge-tts endpoint/browser fallback, and speech-boundary capture (~800 ms silence, 14 s cap).
 - Quiz questions remain Nemotron-generated; backend grading and JSON proficiency writes remain separate from lesson checks. Quiz feedback currently advances automatically; manual Next also exists as a UI handler, not a classifier action.
-- No live provider, microphone, preview, build or backend-start check was run during this documentation update. Existing pending hands-on review remains pending.
+- Prerequisite R locally wires visible check state, quiz phases/notes/load errors, gates actions, and invalidates classification snapshots on relevant state changes. Frontend build and backend import/syntax checks pass; focused request-model/action-filter checks passed with a stub provider and no live call. Master verification reports Uvicorn clean startup and HTTP 200 at `http://127.0.0.1:8000/api/lesson` and `http://127.0.0.1:5173/`. Live provider, browser, microphone/VAD, neural-TTS network and hands-on voice flow remain unverified.
 
 ## Known gaps and assumptions
 
-- `App.tsx` `handleTranscript` currently omits `check_question`/`check_options`, `notes_open`, and `quiz_error` even though API types/backend support them. Thus select-check is excluded, close-notes state may be wrong, and failed-load voice retry may hit request validation. The `start-quiz` dispatch checks the final-scene boundary but not whether its understanding check passed. Prerequisite R must wire these contexts and enforce the quiz-start gate. Do not claim all post-review voice operations work end-to-end.
-- The current contract does not carry check-completion or quiz phase; Prerequisite R adds the specified coordinated state fields and guards. Existing screen/scene/question guards do not fully cover notes/check/phase changes.
+- Classifier request construction now includes validated visible check data and quiz phase context. No live/stubbed endpoint integration exercise of every action path or actual browser voice flow has been run yet; keep end-to-end acceptance pending.
+- Quiz-load errors are distinct from answer-submission failures; detailed hands-on retry/grading flow still requires review.
+- `./start-dev.sh` failed in this macOS shell because its Bash does not support `wait -n`; master launched the existing backend and frontend commands separately. Script repair is outside this pass.
 - SPEC previously listed only original actions in Section 12; updated docs now include the actual expanded vocabulary and mark planned additions explicitly.
 - README previously described browser-only TTS in places and machine-specific Whisper defaults as universally verified. Setup now distinguishes current code defaults from local-machine verification.
 - Local Whisper defaults point to the original developer's Linux cached model path and CUDA. Inspect the actual local runtime/model before STT work; do not download a model or assume this path works on this machine.
@@ -55,4 +56,4 @@ Code present or committed does not establish approval. Earlier Jev branch implem
 
 ## Next action
 
-When implementation is requested, finish Prerequisite R only: repair state/context wiring, run its focused checks, start preview, report evidence/limitations and wait for review. User approval is required before marking it complete and starting Pass 7. Update only this tracker for evidence/progress; do not rewrite plan definitions to record status.
+Implement Pass 7 only, following `BUILD_PLAN.md` and SPEC Section 16. Keep the current Nemotron classifier routing unchanged; do not begin the Pass 8 routing switch. Do not assume Jev credentials/team/model access or claim a live Jev call. Record live-provider, browser and microphone limitations accurately, then stop for review before any next pass.

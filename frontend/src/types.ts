@@ -59,6 +59,7 @@ export interface QuizGrade {
 }
 
 export type IntentScreen = "home" | "lesson" | "quiz" | "results";
+export type QuizPhase = "loading" | "answering" | "grading" | "feedback" | "error";
 
 export type IntentAction =
   | "start-lesson"
@@ -90,6 +91,8 @@ export interface IntentRequest {
   check_options?: QuizOption[] | null;
   notes_open?: boolean;
   quiz_error?: boolean;
+  check_passed?: boolean;
+  quiz_phase?: QuizPhase;
 }
 
 export interface IntentResult {

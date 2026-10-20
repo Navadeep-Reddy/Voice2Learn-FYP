@@ -2,12 +2,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { answerQuiz, askTutor, classifyIntent, fetchLearner, fetchLesson, fetchQuizNext, resetDemo } from "./api";
 import type {
   IntentResult,
+  IntentRequest,
   LearnerState,
   Lesson,
   Proficiency,
   QuizGrade,
   QuizOptionId,
   QuizQuestion,
+  QuizPhase,
 } from "./types";
 import { useVoiceLoop } from "./hooks/useVoiceLoop";
 import Header from "./components/Header";
@@ -64,6 +66,7 @@ export default function App() {
   const [grading, setGrading] = useState(false);
   const [quizLoading, setQuizLoading] = useState(false);
   const [quizError, setQuizError] = useState<string | null>(null);
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [finalProficiency, setFinalProficiency] = useState<Proficiency | null>(
     null,
   );
@@ -96,6 +99,9 @@ export default function App() {
 
   const quizErrorRef = useRef(quizError);
   quizErrorRef.current = quizError;
+  const quizPhase: QuizPhase = quizError ? "error" : grading ? "grading" : grade ? "feedback" : quizLoading || !currentQuestion ? "loading" : "answering";
+  const quizPhaseRef = useRef(quizPhase);
+  quizPhaseRef.current = quizPhase;
   const quizSnapRef = useRef({
     question: currentQuestion,
     grade,
@@ -121,6 +127,7 @@ export default function App() {
   const goLesson = useCallback(() => {
     setPassedChecks([]);
     setCheckSelection(null);
+    setSubmissionError(null);
     setSceneIndex(0);
     setScreen("lesson");
   }, []);
@@ -167,6 +174,7 @@ export default function App() {
         setGrading(false);
         setQuizLoading(false);
         setQuizError(null);
+        setSubmissionError(null);
         setFinalProficiency(null);
         setError(null);
         setScreen("home");
@@ -198,6 +206,7 @@ export default function App() {
     async (seq: number, index: number) => {
       setQuizLoading(true);
       setQuizError(null);
+      setSubmissionError(null);
       setCurrentQuestion(null);
       setSelectedOption(null);
       setGrade(null);
@@ -244,6 +253,7 @@ export default function App() {
     setGrade(null);
     setGrading(false);
     setQuizError(null);
+    setSubmissionError(null);
     setFinalProficiency(null);
     setScreen("quiz");
     void loadQuestion(seq, 0);
@@ -275,6 +285,7 @@ export default function App() {
       setSelectedOption(optionId);
       setGrading(true);
       setQuizError(null);
+      setSubmissionError(null);
       try {
         // The backend state update completes before any next-question
         // request is made.
@@ -324,7 +335,8 @@ export default function App() {
             : "My helper is having trouble right now. Try again.";
         setGrading(false);
         setSelectedOption(null);
-        setQuizError(friendly);
+        setQuizError(null);
+        setSubmissionError(friendly);
         voice.speak(friendly);
       }
     },
@@ -360,6 +372,7 @@ export default function App() {
     setSceneIndex(0);
     setPassedChecks([]);
     setCheckSelection(null);
+    setSubmissionError(null);
     setScreen("lesson");
     void fetchLearner()
       .then((data) => setLearner(data))
@@ -447,20 +460,25 @@ export default function App() {
       }
       if (currentScreen === "quiz") {
         if (result.action === "select-option" && result.option) {
+          if (quizPhaseRef.current !== "answering") { voice.reportUnrecognized(); return; }
           void submitAnswer(result.option);
         } else if (result.action === "open-notes") {
+          if (!["answering", "grading", "feedback"].includes(quizPhaseRef.current) || notesRef.current) { voice.reportUnrecognized(); return; }
           setNotesOpen(true);
           voice.speak("Lesson notes are open. Say read notes to hear them.");
         } else if (result.action === "close-notes") {
+          if (!["answering", "grading", "feedback"].includes(quizPhaseRef.current) || !notesRef.current) { voice.reportUnrecognized(); return; }
           setNotesOpen(false);
           voice.speak("Lesson notes are closed.");
         } else if (result.action === "read-notes") {
+          if (!["answering", "grading", "feedback"].includes(quizPhaseRef.current)) { voice.reportUnrecognized(); return; }
           voice.speak(lessonRef.current?.scenes.map((scene) => `${scene.title}. ${scene.narration}`).join(" ") ?? "Lesson notes are not ready.");
         } else if (result.action === "retry-question" && quizSnapRef.current.question === null) {
+          if (quizPhaseRef.current !== "error") { voice.reportUnrecognized(); return; }
           retryQuizLoad();
         } else if (result.action === "repeat-question") {
           const snap = quizSnapRef.current;
-          if (snap.question && !snap.quizLoading) {
+          if (snap.question && !snap.quizLoading && !snap.grading && !snap.grade) {
             speakQuestion(snap.question, quizIndexRef.current);
           } else {
             voice.reportUnrecognized();
@@ -488,6 +506,7 @@ export default function App() {
       const index = sceneRef.current;
       const isLast = index === currentLesson.scenes.length - 1;
       if (result.action === "select-check" && result.option) {
+        if (passedRef.current.includes(currentLesson.scenes[index].id)) { voice.reportUnrecognized(); return; }
         selectCheck(result.option);
       } else if (result.action === "home") {
         voice.cancelSpeech();
@@ -515,7 +534,7 @@ export default function App() {
         voice.speak(`${currentLesson.scenes[index].narration} Quick check. ${currentLesson.scenes[index].check.question} ${currentLesson.scenes[index].check.options.map((o) => `Option ${o.id}: ${o.text}.`).join(" ")}`);
       } else if (result.action === "start-quiz") {
         // Never leave the lesson early on a malformed result.
-        if (!isLast) {
+        if (!isLast || !passedRef.current.includes(currentLesson.scenes[index].id)) {
           voice.reportUnrecognized();
           return;
         }
@@ -548,26 +567,40 @@ export default function App() {
       const requestQuizSeq = quizSeqRef.current;
       const requestQuestionId = quizSnapRef.current.question?.question_id ?? null;
       const requestQuestion = quizSnapRef.current.question;
+      const requestPhase = quizPhaseRef.current;
+      const requestPassed = requestScreen === "lesson" && !!lessonRef.current?.scenes[requestScene] && passedRef.current.includes(lessonRef.current.scenes[requestScene].id);
+      const requestNotesOpen = notesRef.current;
+      const activeScene = requestScreen === "lesson" ? lessonRef.current?.scenes[requestScene] : null;
       intentPendingRef.current = true;
       intentSeqRef.current += 1;
       const seq = intentSeqRef.current;
-      const body =
+      const body: IntentRequest =
         requestScreen === "lesson"
           ? {
               transcript: text,
               screen: requestScreen,
-              scene_id:
-                lessonRef.current?.scenes[requestScene]?.id ?? "",
+                scene_id:
+                  lessonRef.current?.scenes[requestScene]?.id ?? "",
+              check_question: activeScene?.check.question,
+              check_options: activeScene?.check.options.map(({id, text}) => ({id, text})),
+              check_passed: requestPassed,
             }
-          : requestScreen === "quiz" && requestQuestion
+          : requestScreen === "quiz"
             ? {
                 transcript: text,
                 screen: requestScreen,
-                quiz_question: requestQuestion.question,
-                quiz_options: requestQuestion.options.map((option) => ({
-                  id: option.id,
-                  text: option.text,
-                })),
+                quiz_phase: requestPhase,
+                notes_open: requestPhase === "error" || requestPhase === "loading" ? false : requestNotesOpen,
+                quiz_error: requestPhase === "error",
+                ...(requestPhase === "answering" && requestQuestion
+                  ? {
+                      quiz_question: requestQuestion.question,
+                      quiz_options: requestQuestion.options.map((option) => ({
+                        id: option.id,
+                        text: option.text,
+                      })),
+                    }
+                  : {}),
               }
             : { transcript: text, screen: requestScreen };
       void (async () => {
@@ -582,14 +615,17 @@ export default function App() {
           }
           if (
             requestScreen === "lesson" &&
-            sceneRef.current !== requestScene
+            (sceneRef.current !== requestScene ||
+              !lessonRef.current?.scenes[sceneRef.current] ||
+              lessonRef.current.scenes[sceneRef.current].id !== activeScene?.id ||
+              passedRef.current.includes(lessonRef.current.scenes[sceneRef.current].id) !== requestPassed)
           ) {
             return;
           }
           if (
-            requestScreen === "quiz" &&
+              requestScreen === "quiz" &&
             (quizSeqRef.current !== requestQuizSeq ||
-              quizSnapRef.current.question?.question_id !== requestQuestionId)
+              quizSnapRef.current.question?.question_id !== requestQuestionId || quizPhaseRef.current !== requestPhase || notesRef.current !== requestNotesOpen)
           ) {
             return;
           }
@@ -651,7 +687,7 @@ export default function App() {
   useEffect(() => {
     intentSeqRef.current += 1;
     intentPendingRef.current = false;
-  }, [screen, sceneIndex, currentQuestion?.question_id]);
+  }, [screen, sceneIndex, currentQuestion?.question_id, passedChecks, notesOpen, quizPhase]);
 
   useEffect(() => {
     if (screen === "lesson" && lesson) {
@@ -757,7 +793,7 @@ export default function App() {
                 selectedOption={selectedOption}
                 grade={grade}
                 locked={grading || quizLoading}
-                error={quizError}
+                error={submissionError}
                 onSelect={(id) => void submitAnswer(id)}
                 onNext={onQuizNext}
                 lesson={lesson}
