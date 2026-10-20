@@ -1,6 +1,6 @@
 # Voice2Learn — Pre-Review MVP Build Plan
 
-Implement one pass at a time. Passes 1–6 below are approved historical definitions; do not replay or rewrite them. The current branch also contains unapproved post-review implementation. Its remaining reconciliation work and the authorized Jev/navigation follow-up are defined after Pass 6. Read `PROGRESS.md` to select the current pass.
+Implement one pass at a time. Passes 1–6 below are approved historical definitions; do not replay or rewrite them. The current branch also contains unapproved post-review implementation. Its remaining reconciliation work and the authorized local Laya/navigation follow-up are defined after Pass 6. Read `PROGRESS.md` to select the current pass.
 
 **After every pass: stop, verify, summarize, and wait for review.**
 
@@ -356,7 +356,7 @@ Finish and verify the already requested comprehension/voice-access work on this 
 - Repair frontend classifier request construction: send visible active check/options, notes state and real question-load failure state. Current code defines these fields but omits them in `handleTranscript`.
 - Add the coordinated `check_passed`/`quiz_phase` state fields specified in SPEC Section 12; use state-aware action availability. Distinguish question-load errors from answer-submission errors. Suppress duplicate/stale requests when any relevant state changes.
 - Preserve current response/action vocabulary, Nemotron routing, five-question quiz and backend grading. Check grading currently compares authored options in the application; do not misdescribe it as backend assessment.
-- Review/fix only demonstrated blockers in this existing slice; do not add Section 17 extensions or port an old Jev implementation here.
+- Review/fix only demonstrated blockers in this existing slice; do not add Section 17 extensions or port a superseded remote classifier implementation here.
 
 ### Files
 
@@ -366,42 +366,41 @@ Targeted `frontend/src/App.tsx`, `types.ts`, existing components/voice hook only
 
 Exercise voice check selection/unlock/retry, gated forward movement, Back/Home, help, quiz notes and load-error retry with correct request bodies; malformed state/answer context; stale replies after state changes; existing tutor and quiz behavior. Build frontend, start backend and preview. Record browser/microphone checks and network-dependent speech separately from static/stubbed checks. Preserve user learner data. Report and wait for approval before Pass 7.
 
-## Pass 7 — Isolated Vercel Jev Client and Configuration
+## Pass 7 — Isolated Local Laya Typed-Decisions Boundary
 
 ### Scope
 
-- Inspect official Vercel TypeSafe-compatible API and native Choice schema; use `SPEC.md` Section 16. Implement `backend/app/jev.py` with existing async httpx/Pydantic. No application routing switch.
-- Backend settings: `AI_GATEWAY_API_KEY`, `AI_GATEWAY_MODEL=typesafe-ai/jev`, finite positive `AI_GATEWAY_TIMEOUT_SECONDS=10`, maximum 30. No hardcoded key, startup network call, direct TypeSafe account, model download or automatic Gateway fallback.
-- Typed response validation: offered selected choice, exact finite probability keys/range/sum, confidence, max-choice consistency, optional nullable routing metadata. Bound transport; close clients on every path; sanitize all failures.
-- Preserve current classifier using the NVIDIA/OpenRouter Nemotron boundary. Reuse dependencies; edit requirements only if necessary. Keep keys out of logs, reports, shell arguments and frontend variables.
-- Existing Jev work/evidence from another branch may be inspected, but reusing it needs review against this base; it is not installed/approved here by assumption.
+- Implement isolated `backend/app/laya.py` around official `laya==0.4.12`, pinned local `convaiinnovations/laya-typed-decisions` checkpoint and synchronous Choice API; no application routing switch.
+- Local path only; no import/startup/request download or network access. Default ignored artifact path `backend/models/laya-typed-decisions`; optional `VOICE2LEARN_LAYA_MODEL_DIR` override and `auto|cuda|mps|cpu` selection (`CUDA > MPS > CPU`). Explicit unavailable/mismatched device is an error.
+- Validate typed choices, exact finite probability distribution, confidence, maximum-choice consistency and ambiguity. Limit offered choices to 19. Sanitize failures and serialize shared model inference; no retry, confidence threshold or Nemotron classifier fallback here.
+- Preserve current classifier on Nemotron. Pin Laya only; do not universal-pin platform-specific Torch. Setup supports macOS/MPS and CPU; Windows NVIDIA users install the correct CUDA PyTorch wheel per official instructions.
 
 ### Files
 
-`backend/app/jev.py`, `backend/.env.example`, `backend/requirements.txt` only if needed, README and PROGRESS.
+`backend/app/jev.py` (delete), `backend/app/laya.py`, `backend/.env.example`, `backend/requirements.txt`, README, AGENTS, SPEC, BUILD_PLAN, PROGRESS, DESIGN and USER_NAVIGATION only for architecture/provider/status updates.
 
 ### Verify and stop
 
-Offline checks for request/auth/URL, config, invalid JSON/distributions, nullable metadata, timeout/transport/non-2xx, cleanup and leak safety. Live isolated Choice only when key/team/model access works; distinguish live failures from mocks. Record resolved metadata honestly, not an echoed alias as proof of version. Capture comparable baseline classifier results/timing when Nemotron access is available. Build frontend, start backend/preview, report and wait for approval. No Pass 8 work.
+Test input/output failures, ties, singleton concurrency, device selection/unavailability/mismatch, sanitized errors and offline local path with fakes. Install and introspect actual package API, download the exact pinned checkpoint, record revision/inventory/hash, then run repeated local Choices on available hardware and CPU if feasible. Verify imports/startup do not load Torch/Laya or make network calls and current intent still uses Nemotron. Run backend/frontend checks and learner-state hash. Report Windows CUDA as unverified actual hardware here. Stop for review; no Pass 8 work.
 
-## Pass 8 — Jev Routing for the Current Application
+## Pass 8 — Laya Routing for the Current Application
 
 ### Scope
 
-- Switch only `/api/intent/classify` to the isolated Jev boundary. Preserve the full existing actions, public `{action, option}` shape and prerequisite state fields.
+- Switch only `/api/intent/classify` to the isolated local Laya boundary. Preserve the full existing actions, public `{action, option}` shape and prerequisite state fields.
 - Use one screen/state-specific Choice over allowed actions. Internal check-A/B/C/D and select-A/B/C/D normalize to `select-check` and `select-option`. Offer no answer selection during loading/grading/feedback/error or without an active visible question/check.
 - Include current scene/final status, check completion, visible check/quiz options, notes and error/phase context. Resolve authored data backend-side; never include hidden answers, check hints, old graded explanations or raw learner-attempt answer records in classification state.
-- Named conservative provisional acceptance thresholds; low confidence → unclear without retry. Invalid output retries once; config/auth/network/timeout/non-2xx → sanitized 502 without retry or Nemotron fallback.
+- Evaluate named acceptance thresholds; low confidence → unclear without retry. Invalid Laya output/load/inference → sanitized 502 without retry or Nemotron classifier fallback.
 - Preserve gate notices, Back-from-first-scene Home, original-transcript tutor forwarding, notes, local check comparison and deterministic quiz grading. Do not change neural/browser TTS, VAD or model-generation provider fallbacks.
 - Recheck screen/state before action execution; extend guards only where necessary to preserve the new context. No navigation extensions from Section 17 yet.
 
 ### Files
 
-`backend/app/intent.py`, `jev.py`, intent helpers in `context_builder.py`; narrowly scoped frontend guard corrections if required by the state contract, coordinated with its owner; PROGRESS. No unrelated tutor/quiz/provider refactor.
+`backend/app/intent.py`, `laya.py`, intent helpers in `context_builder.py`; narrowly scoped frontend guard corrections if required by the state contract, coordinated with its owner; PROGRESS. No unrelated tutor/quiz/provider refactor.
 
 ### Verify and stop
 
-Controlled provider cases for every existing action and A/B/C/D in both selection modes; gates, notes open/closed, quiz load failure, malformed context, wrong-state actions, uncertainty/negation/mixed requests, provider failure, stale results. Confirm classifier makes no Nemotron call; tutoring/generation still do. Preserve raw transcript, hidden answers and result shape. Build/start/preview; report live gaps and await approval.
+Controlled Laya cases for every existing action and A/B/C/D in both selection modes; gates, notes open/closed, quiz load failure, malformed context, wrong-state actions, uncertainty/negation/mixed requests, model failure, stale results. Confirm classifier makes no Nemotron call; tutoring/generation still do. Preserve raw transcript, hidden answers and result shape. Build/start/preview; report hardware gaps and await approval.
 
 ## Pass 9 — Evaluate and Review the Core Migration
 
@@ -409,11 +408,11 @@ Controlled provider cases for every existing action and A/B/C/D in both selectio
 
 - Small labeled set from representative written examples and actual local Whisper transcripts across all screens, including checks, quiz options, notes, retry, help, negation, mixed requests, ambiguity and gates. Store no raw child audio or credentials.
 - Evaluate wrong actions and valid commands rejected; tune named thresholds separately for navigation and selections based on evidence. Confidence is not calibrated accuracy by assumption.
-- Compare baseline and Jev classification latency under comparable contexts and conditions. Separately measure VAD/Whisper/TTS/full-turn delay; keep the current utterance capture behavior. Missing baseline/access is a reported limitation, not invented data.
+- Compare baseline and Laya classification latency under comparable contexts and conditions. Separately measure VAD/Whisper/TTS/full-turn delay; keep the current utterance capture behavior. Missing baseline/access is a reported limitation, not invented data.
 - End-to-end Home → checks/lesson → contextual tutor on two scenes → gated quiz start → notes/repeat/retry → five answers/grades → Results → review/retake by voice, after one initial activation.
 - Frontend build/backend startup/error recovery/continuous listening; preserve and restore verification data without overwriting learner data. README setup and PROGRESS evidence reflect reality.
 
-Stop for approval. Pass 9 approves only core Jev routing; additional general voice navigation remains planned until its own passes are reviewed.
+Stop for approval. Pass 9 approves only core Laya routing; additional general voice navigation remains planned until its own passes are reviewed.
 
 ## Pass 10 — General Voice Destinations, Resume and Orientation
 
@@ -422,7 +421,7 @@ Stop for approval. Pass 9 approves only core Jev routing; additional general voi
 Implement exactly SPEC Section 17's first group and corresponding USER_NAVIGATION commands: extend `home` to Results; restart/jump/resume/return lesson; repeat tutor answer; read position/progress/results. Preserve original actions and proficiency behavior.
 
 - Derive destinations from authored IDs/order/titles/concepts; no fixed lesson phrases/count or new curriculum engine.
-- Add nullable `target_scene_id` to Python/TypeScript results together. One internal Jev choice per existing jump destination; no second model call. A requested blocked forward jump explains the check gate without moving. Validate target IDs and completed-check path before execution.
+- Add nullable `target_scene_id` to Python/TypeScript results together. One internal Laya choice per existing jump destination; no second model call. A requested blocked forward jump explains the check gate without moving. Validate target IDs and completed-check path before execution.
 - Add only the specified optional session context and simple local state: lesson resume/check snapshot, single jump origin, tutor-answer availability. Resume is within the open application; no persisted navigation/history schema.
 - Keep this file's allowed new actions consistent with SPEC/USER_NAVIGATION; invalid or ambiguous destinations clarify without moving. Keep speech/listening/stale-response protection.
 
@@ -451,7 +450,7 @@ All pause/resume/continue meanings by state, repeated feedback, last-question Re
 
 - Exercise every USER_NAVIGATION command in its allowed state with real local speech where available; unavailable commands clarify safely. No unsupported cross-lesson features.
 - Full lesson/check/tutor/quiz/notes/pacing/exit/resume/results path, including pauses, named/numbered jumps, blocked forward jumps, unclear input, provider errors and TTS fallback.
-- Reevaluate Jev choices/thresholds/latency after the action-set expansion; state the model/version/access and actual sample count. Mocks do not prove live speech/model compatibility.
+- Reevaluate Laya choices/thresholds/latency after the action-set expansion; state the model/revision/device and actual sample count. Mocks do not prove real speech/model compatibility.
 - Build frontend, start backend/preview, verify keys/answer separation and no duplicate grades/data loss; restore disposable verification state safely.
 - Update README and PROGRESS with branch/base/approved commits when known, evidence, live gaps and remaining issues. USER_NAVIGATION status must match approved implementation. Do not claim earlier untested actions live.
 

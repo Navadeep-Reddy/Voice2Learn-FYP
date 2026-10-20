@@ -472,9 +472,9 @@ At wider widths:
 Keep understanding checks inside the existing lesson screen, below narration, with four large A–D tactile options and concise correct/try-again feedback. Show the forward button disabled until correct; keep Back and tutor access visible. On the quiz, place an unobtrusive Lesson Notes disclosure below the question/options; its compact recap must not obscure the question or fixed microphone. Voice help hints should be short and screen-specific. Preserve the current palette, readable feedback, minimum 48px targets and reduced-motion behavior.
 
 
-## 19. Jev Routing and General Voice Navigation
+## 19. Local Intent Routing and General Voice Navigation
 
-Jev is an internal routing change: show existing listening/thinking/speaking/retry states, never model labels, confidence scores, API details or provider errors. Keep the current scene/question visible while classification or tutoring is pending. Use short spoken boundary prompts when a check blocks forward movement or a destination is unavailable; do not silently navigate.
+Local Laya routing is an internal change: show existing listening/thinking/speaking/retry states, never model labels, confidence scores, device details or internal errors. Keep the current scene/question visible while classification or tutoring is pending. Use short spoken boundary prompts when a check blocks forward movement or a destination is unavailable; do not silently navigate.
 
 Use actual loaded lesson titles and scene positions in hints rather than hardcoded topics or counts for general commands. Keep help short and appropriate to current state. Navigation extensions reuse the existing four screens; no new dashboard, settings screen or chapter catalogue.
 

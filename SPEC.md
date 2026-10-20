@@ -1,6 +1,6 @@
 # Voice2Learn — Pre-Review MVP Specification
 
-**Status:** Product/contract source of truth; includes planned Jev migration. Read `PROGRESS.md` for actual implementation and approval state.
+**Status:** Product/contract source of truth; includes planned local Laya migration. Read `PROGRESS.md` for actual implementation and approval state.
 **Phase:** Pre-Review MVP
 **Scope:** One polished vertical slice
 
@@ -45,7 +45,7 @@ The demo should prove:
   - division
 - Local JSON persistence
 - Results/progress screen and authored lesson recap during quiz
-- Planned Jev routing through Vercel AI Gateway
+- Planned local Laya Typed-Decisions intent routing
 - Planned lesson-agnostic voice navigation described in Sections 16–17
 
 ### Out of Scope
@@ -84,13 +84,13 @@ The demo should prove:
 ### AI / Voice
 
 - STT: user's existing local Whisper installation
-- Target intent routing: Jev through Vercel AI Gateway; current baseline classification still uses Nemotron until Pass 8.
+- Target intent routing: local Laya Typed-Decisions; current baseline classification still uses Nemotron until Pass 8.
 - Tutor + question generation: Nemotron through NVIDIA Integrate first
   (`nvidia/nemotron-3-super-120b-a12b`), with OpenRouter fallback
   (`nvidia/nemotron-3-super-120b-a12b:free`)
 - TTS: backend neural speech (`edge-tts`, network required) with browser `speechSynthesis` fallback
 
-The frontend calls only the application backend. Nemotron access uses NVIDIA Integrate as primary and OpenRouter as fallback through `backend/app/llm.py`. Jev has its own backend client and key; its failures do not fall back to Nemotron. Neural TTS and browser TTS retain their existing fallback behavior.
+The frontend calls only the application backend. Nemotron access uses NVIDIA Integrate as primary and OpenRouter as fallback through `backend/app/llm.py`. Laya runs from an explicitly installed local checkpoint; it has no provider credentials/network path, and its failures do not fall back to Nemotron. Neural TTS and browser TTS retain their existing fallback behavior.
 
 ## 5. Screens
 
@@ -310,7 +310,7 @@ True barge-in while the system is speaking is not required.
 
 ### 7.3 Semantic Intent Classification
 
-Target: every accepted non-empty STT transcript goes to `POST /api/intent/classify`, where Jev selects one action allowed by the current screen and interaction state. Until Pass 8, this endpoint uses the current Nemotron NVIDIA-primary/OpenRouter-fallback boundary. No frontend exact phrase matching decides actions. Empty turns resume silently.
+Target: every accepted non-empty STT transcript goes to `POST /api/intent/classify`, where local Laya selects one action allowed by the current screen and interaction state. Until Pass 8, this endpoint uses the current Nemotron NVIDIA-primary/OpenRouter-fallback boundary. No frontend exact phrase matching decides actions. Empty turns resume silently.
 
 Preserve the current action names during migration:
 
@@ -324,11 +324,11 @@ Preserve the current action names during migration:
 
 `select-check` and `select-option` require option A/B/C/D. Other actions have `option: null`. `help` means interface guidance; `ask-question` means conceptual lesson help. The latter forwards the original transcript and scene to Nemotron, displays/speaks its answer, and stays on the same scene.
 
-Jev uses one screen/state-specific Choice. Internal `check-A/B/C/D` and `select-A/B/C/D` choices normalize to the existing public selection actions. Neither hidden quiz answers/explanations nor authored check correct-option/hints belong in classification context. Quiz classification interprets the learner's selection, never solves the question.
+Laya uses one screen/state-specific Choice with no more than 19 offered options. Internal `check-A/B/C/D` and `select-A/B/C/D` choices normalize to the existing public selection actions. Neither hidden quiz answers/explanations nor authored check correct-option/hints belong in classification context. Quiz classification interprets the learner's selection, never solves the question.
 
 Interpret paraphrases and imperfect STT semantically. “Next unit” refers to the next existing lesson scene. Negated commands must not execute. “Explain before moving on” requests help without queuing navigation. Unsupported early quiz start or unavailable destinations return `unclear`. At a blocked forward transition, explain that the quick check must be answered first; never silently mark it passed. Subject tutoring during an active quiz remains unavailable; authored notes remain available.
 
-Valid low-confidence decisions return `unclear` without mutation or retry. Invalid provider output retries once; other failures follow Section 16. Classification itself never changes navigation, answers, or learner data.
+Valid low-confidence decisions return `unclear` without mutation or retry (confidence thresholds are evaluated in Pass 9; checkpoint confidence is uncalibrated). Invalid local output, model load or inference returns friendly 502 without retry or Nemotron fallback; other device/configuration failures are likewise sanitized. Classification itself never changes navigation, answers, or learner data.
 
 ## 8. Tutor Q&A
 
@@ -557,7 +557,7 @@ Before each tutor/quiz model call and each intent-classifier provider attempt, o
 
 `backend/data/context.md`
 
-`learner_state.json` and `lesson.json` remain the sources of truth. `context.md` is generated diagnostic context and must never be edited manually. Each request sends its own in-memory context, never rereads that shared file. Keep tutor/quiz context interfaces intact when adjusting intent context. Build Jev context from visible screen data and validated state; do not copy whole lesson objects containing check answers or recent grading data into it.
+`learner_state.json` and `lesson.json` remain the sources of truth. `context.md` is generated diagnostic context and must never be edited manually. Each request sends its own in-memory context, never rereads that shared file. Keep tutor/quiz context interfaces intact when adjusting intent context. Build Laya state from visible screen data and validated state; do not copy whole lesson objects containing check answers or recent grading data into it.
 
 Do not scatter prompt/context construction across route handlers.
 
@@ -588,7 +588,7 @@ Uses the local Whisper adapter.
 
 ### `POST /api/intent/classify`
 
-Existing HTTP boundary, switching from Nemotron to Jev in Pass 8. Preserve the current response shape during that pass.
+Existing HTTP boundary, switching from Nemotron to local Laya in Pass 8. Preserve the current response shape during that pass.
 
 Request fields:
 
@@ -690,7 +690,7 @@ Examples:
 
 - Whisper cannot transcribe -> show `I didn't catch that. Try again.`
 - command is unclear -> stay on the current screen and ask the child to repeat
-- Jev classifier error, or both Nemotron providers failing for tutoring/generation -> show `My helper is having trouble right now. Try again.`
+- Laya classifier error, or both Nemotron providers failing for tutoring/generation -> show `My helper is having trouble right now. Try again.`
 - invalid LLM output after retry -> do not mutate state; allow retry
 - microphone unavailable -> keep click/tap fallback controls usable
 
@@ -726,36 +726,35 @@ During the quiz, an expandable authored lesson recap is viewable and readable al
 TTS prefers a configurable neural speech voice through a small backend endpoint; if unavailable it falls back to browser speech synthesis. Spoken audio must pause STT and resume listening afterward, with cancellation on navigation. Neural TTS requires network availability; it must not download a local model or expose credentials. The original five-question Nemotron quiz, four screens, and proficiency rules remain unchanged.
 
 
-## 16. Jev Architecture and Provider Boundary (planned)
+## 16. Local Laya Typed-Decisions Boundary (planned)
 
 ### End-to-end flow
 
 ```text
 Microphone → browser speech/silence detection → complete utterance
 → local Whisper → transcript + screen/state → /api/intent/classify
-→ backend Jev Choice through Vercel AI Gateway → validated action JSON
+→ backend local Laya Choice → validated action JSON
   → navigation / repeat / help / checks / notes: application code
   → ask-question: ORIGINAL transcript + scene → Nemotron tutor → answer
   → select-option: deterministic backend quiz grading → learner JSON
 → neural TTS (browser speech fallback) → automatic listening resume
 ```
 
-Jev selects the specific action in one call. Do not first classify navigation versus learning and then make a second dependent model call to identify navigation. Navigation never needs Nemotron. Nemotron remains the tutor and one-at-a-time quiz generator through the existing NVIDIA/OpenRouter boundary. Authored lesson checks remain deterministically compared in application code, without quiz proficiency writes; do not claim they are backend graded today.
+Laya selects the specific action in one call. Do not first classify navigation versus learning and then make a second dependent model call to identify navigation. Navigation never needs Nemotron. Nemotron remains the tutor and one-at-a-time quiz generator through the existing NVIDIA/OpenRouter boundary. Authored lesson checks remain deterministically compared in application code, without quiz proficiency writes; do not claim they are backend graded today.
 
 ### Provider integration
 
-Use `backend/app/jev.py` with existing async `httpx`, typed Pydantic request/response models, and backend-only settings. Chosen transport: Vercel's TypeSafe-compatible HTTP API, not direct TypeSafe hosting or OpenRouter's decision endpoint. Configuration: `AI_GATEWAY_API_KEY`, `AI_GATEWAY_MODEL` default `typesafe-ai/jev`, `AI_GATEWAY_TIMEOUT_SECONDS` default 10, finite positive maximum 30. Base `https://ai-gateway.vercel.sh/typesafe`; POST `/v1/systemone`, optional diagnostic GET `/v1/models`; bearer Gateway key. Confirm official format at implementation time. No SDK, local Jev weight download, training, startup network call, or Gateway decision/model fallback is required. Missing keys fail only the requesting feature; basic content startup remains available.
+Use `backend/app/laya.py` as an isolated async boundary around synchronous official `laya==0.4.12` `load(local_path, device=...)` and `predict(state, questions)`. Checkpoint `convaiinnovations/laya-typed-decisions`, revision `e929ae5cf69bc34259cd2f95c9e91145b818b1f0`, is installed explicitly under ignored `backend/models/laya-typed-decisions`; default runtime path is local-only, overridable by `VOICE2LEARN_LAYA_MODEL_DIR`. No Hub ID, auto-download, model import/load at app import/startup, or request-time network/cache use. Before lazy import set `USE_TF=0`, `HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`. `VOICE2LEARN_LAYA_DEVICE=auto|cuda|mps|cpu`; auto order CUDA > MPS > CPU; unavailable explicit devices fail without fallback. Keep the library's default dtype behavior and serialize shared prediction. Choice wrapper allows 2–19 options. No credentials, Gateway, retries or classifier fallback.
 
-Official provider references (checked 2026-10-20): [Vercel TypeSafe-compatible API](https://vercel.com/docs/ai-gateway/sdks-and-apis/typesafe), [Jev model](https://vercel.com/ai-gateway/models/jev), [TypeSafe Choice](https://docs.typesafe.ai/primitives/choice). Catalog listing does not establish key/team access. Verify a real decision before claiming live operation; echoed model aliases do not prove the resolved version.
+The model is an English specialist ModernBERT-large checkpoint (421M parameters, approximately 846 MB; 1024-token context), Apache-2.0. Its confidence is uncalibrated for this checkpoint; do not treat confidence as accuracy or promise latency. Install artifacts explicitly as setup; runtime remains offline/local-only.
 
 ### Decision validation and recovery
 
-Validate the response envelope, selected offered choice, exact probability keys, finite 0..1 values, distribution sum with explicit tolerance, confidence bounds and selected/max-probability consistency. A tied/ambiguous maximum is uncertainty (unclear), not a reason to retry for a preferred decision. Optional Gateway metadata must be typed without requiring fields that may be omitted/null. Application code owns normalization, state validation and acceptance. Use named conservative provisional thresholds; evaluate navigation and selections separately, with stricter selection acceptance if justified. Jev confidence is not an accuracy guarantee.
+Validate `answers[question_id]`, selected offered choice, exact probability keys, strict finite non-boolean numeric 0..1 values, distribution sum tolerance, confidence bounds and selected/max-probability consistency. Accept valid integer 0/1. A tied maximum is ambiguous; later routing maps ambiguity or low confidence to `unclear`, without retry. Application code owns normalization, state validation and acceptance. Pass 9 evaluates separate thresholds; Laya confidence is uncalibrated and not an accuracy guarantee.
 
 - Valid low confidence or valid ambiguity: return `unclear`; no retry to force a choice.
-- Invalid provider JSON/schema/distribution: retry once with rebuilt context, then friendly 502. Maximum two provider attempts per turn.
-- Missing configuration, authentication/access failure, timeout, network or non-success response: friendly 502, no retry or fallback. Never expose raw bodies, keys, headers, prompts or traces to students.
-- Keep provider integration isolated from `llm.py`, `nvidia.py`, `openrouter.py`, tutor and quiz generation.
+- Invalid local output, model load/inference, missing model files or device mismatch: friendly 502, no retry or Nemotron fallback. Never expose raw model output, transcript, state, absolute path, library errors or traces.
+- Keep the local model integration isolated from `llm.py`, `nvidia.py`, `openrouter.py`, tutor and quiz generation. Model weights are ignored setup artifacts and are never automatically downloaded at runtime.
 - Keep duplicate guards and stale-result guards. Discard intent responses if screen, scene, question, check completion, notes state, phase or confirmation state changed before execution. Recheck state before all side effects.
 - Record classifier latency separately from VAD, Whisper, tutor, TTS and total turn latency. Do not promise a speedup before comparable measurements.
 
@@ -776,7 +775,7 @@ Add `restart-lesson`, `jump-scene`, `resume-lesson`, `return-scene`, `repeat-tut
 - `read-position`: all screens; speak current screen and scene/question position as applicable.
 - `read-progress`: Home/Results; read available proficiency. `repeat-results`: Results; repeat current score and encouragement. Do not fabricate missing results/history.
 
-Pass 10 result schema: `{ "action": "jump-scene", "option": null, "target_scene_id": "scene-3" }`. Return null target for other actions; existing action/option rules remain. Jev offers one internal `jump:<scene_id>` choice per existing lesson destination and normalizes it to `jump-scene` plus target; no second model call or free-form invented destination. Unknown or ambiguous destinations return `unclear`; a known destination blocked by an incomplete check produces a gate explanation without movement. State additions: optional `resume_scene_id`, `resume_passed_scene_ids` on Home; `passed_scene_ids`, `return_scene_id`, `tutor_answer_available` on Lesson; validate IDs against authored data and avoid passing answer text. These are application-session context, not authenticated progress or permission proofs.
+Pass 10 result schema: `{ "action": "jump-scene", "option": null, "target_scene_id": "scene-3" }`. Return null target for other actions; existing action/option rules remain. Laya offers one internal `jump:<scene_id>` choice per existing lesson destination and normalizes it to `jump-scene` plus target; no second model call or free-form invented destination. Unknown or ambiguous destinations return `unclear`; a known destination blocked by an incomplete check produces a gate explanation without movement. State additions: optional `resume_scene_id`, `resume_passed_scene_ids` on Home; `passed_scene_ids`, `return_scene_id`, `tutor_answer_available` on Lesson; validate IDs against authored data and avoid passing answer text. These are application-session context, not authenticated progress or permission proofs.
 
 ### Pass 11: pacing, feedback and exit
 

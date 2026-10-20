@@ -1,6 +1,6 @@
 # Voice2Learn — Voice Navigation List
 
-Commands use the current lesson’s actual content and available actions. **[R]** needs baseline wiring/review; **[10]** and **[11]** are planned extension passes. Other commands have existing code paths, not a claim of live verification. Jev routing begins in Pass 8. Voice applies after initial microphone setup, while listening.
+Commands use the current lesson’s actual content and available actions. **[R]** needs baseline wiring/review; **[10]** and **[11]** are planned extension passes. Other commands have existing code paths, not a claim of live verification. Local Laya routing begins in Pass 8. Voice applies after initial microphone setup, while listening.
 
 - “Start lesson” / “Let's learn” — start the available lesson from Home.
 - “Next” / “Continue” — move to the next scene after passing its quick check.
