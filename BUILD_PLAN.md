@@ -343,6 +343,8 @@ Stop after this pass. Do not begin final-project expansion.
 
 Order: **Prerequisite R → 7 → 8 → 9 → 10 → 11 → 12**. Each is a separate review boundary. This documentation change authorizes planning, not starting code. Do not infer approval from committed code or import earlier branch status. No new architecture, API-contract, plan, or tracker documents; sources are `SPEC.md`, this file and `PROGRESS.md`. `USER_NAVIGATION.md` stays a concise user command list.
 
+User-requested speech revision (2026-10-21): references below to preserving neural/browser speech or TTS fallback now mean preserving the female neural voice with text-only failure recovery, per SPEC. Do not restore browser/system speech. Original Passes 1–6 remain approved history.
+
 ## Prerequisite R — Reconcile the Existing Post-Review Baseline
 
 ### Goal

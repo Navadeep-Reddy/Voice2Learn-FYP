@@ -53,6 +53,10 @@ body {
   transform: scale(1.015);
   transition-duration: 150ms;
 }
+
+.tactile.v2l-microphone {
+  border-radius: 50%;
+}
 .tactile:active {
   transform: translate(2px, 4px);
   border-bottom-width: 2px;

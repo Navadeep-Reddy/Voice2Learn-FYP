@@ -6,12 +6,15 @@ receive the assistant text content back.
 
 from __future__ import annotations
 
+import logging
 import os
+from http import HTTPStatus
 
 import httpx
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 DEFAULT_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"
+log = logging.getLogger("voice2learn.openrouter")
 
 
 class OpenRouterError(RuntimeError):
@@ -27,6 +30,7 @@ def get_model() -> str:
 def get_api_key() -> str:
     key = os.environ.get("OPENROUTER_API_KEY", "").strip()
     if not key:
+        log.warning("OpenRouter configuration error: OPENROUTER_API_KEY is missing")
         raise OpenRouterError("missing api key")
     return key
 
@@ -48,14 +52,22 @@ async def chat_completion(messages: list[dict[str, str]]) -> str:
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(OPENROUTER_URL, json=payload, headers=headers)
     except Exception as exc:
+        log.warning("OpenRouter transport failure (%s)", type(exc).__name__)
         raise OpenRouterError("provider request failed") from exc
     if response.status_code >= 400:
+        try:
+            reason = HTTPStatus(response.status_code).phrase
+        except ValueError:
+            reason = "Unknown status"
+        log.warning("OpenRouter request rejected (HTTP %s: %s)", response.status_code, reason)
         raise OpenRouterError("provider request failed")
     try:
         data = response.json()
         content = data["choices"][0]["message"]["content"]
     except Exception as exc:
+        log.warning("OpenRouter response invalid: missing or malformed completion (%s)", type(exc).__name__)
         raise OpenRouterError("provider response invalid") from exc
     if not isinstance(content, str) or not content.strip():
+        log.warning("OpenRouter response invalid: completion content is empty or not text")
         raise OpenRouterError("provider response invalid")
     return content

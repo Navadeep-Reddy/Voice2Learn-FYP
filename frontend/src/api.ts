@@ -128,12 +128,19 @@ export function resetDemo(): Promise<LearnerState> {
   return postJson<LearnerState>("/api/demo/reset");
 }
 
+class SpeechRequestError extends Error {
+  constructor(public readonly status: number) {
+    super("Neural speech request failed");
+    this.name = "SpeechRequestError";
+  }
+}
+
 export async function synthesizeSpeech(text: string, signal: AbortSignal): Promise<Blob> {
   const response = await fetch(`${API_BASE_URL}/api/tts/speak`, {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text }), signal,
   });
-  if (!response.ok) throw new Error("Neural narration unavailable");
+  if (!response.ok) throw new SpeechRequestError(response.status);
   return response.blob();
 }
 

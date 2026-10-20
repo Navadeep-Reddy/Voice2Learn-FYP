@@ -36,9 +36,10 @@ export default function LessonScreen({
   const scene = lesson.scenes[sceneIndex];
   const isFirst = sceneIndex === 0;
   const isLast = sceneIndex === lesson.scenes.length - 1;
+  const selectionCorrect = checkSelection === scene.check.correct_option;
 
   return (
-    <div className="mx-auto w-full max-w-[1120px] px-5 pb-36 pt-6 md:px-16 md:pt-10">
+    <div className="mx-auto w-full max-w-[1120px] px-5 pb-8 pt-6 md:px-16 md:pt-10">
       <div className="flex items-center justify-between gap-4">
         <button
           type="button"
@@ -79,13 +80,19 @@ export default function LessonScreen({
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           {scene.check.options.map((option) => (
             <button type="button" key={option.id} onClick={() => onCheckSelect(option.id)}
-              className={`tactile min-h-[56px] bg-subtle p-3 text-left text-base font-bold text-ink ${checkSelection === option.id ? "border-brand bg-leaf" : ""}`}>
-              {option.id}. {option.text}
+              aria-pressed={checkSelection === option.id}
+              className={`tactile flex min-h-[56px] items-center justify-between gap-3 p-3 text-left text-base font-bold text-ink ${checkSelection === option.id ? (selectionCorrect ? "border-leafdark bg-leaf ring-2 ring-leafdark" : "border-redder bg-redsoft ring-2 ring-redder") : "bg-subtle"}`}>
+              <span>{option.id}. {option.text}</span>
+              {checkSelection === option.id && (
+                <span aria-hidden="true" className={`shrink-0 text-lg ${selectionCorrect ? "text-leafdark" : "text-redder"}`}>
+                  {selectionCorrect ? "✓" : "✕"}
+                </span>
+              )}
             </button>
           ))}
         </div>
-        <p aria-live="polite" className="mt-3 text-base font-bold text-ink">
-          {checkPassed ? "That's right! You can move on." : checkSelection ? `Not quite. ${scene.check.hint} Try again!` : "Choose an answer before moving on."}
+        <p aria-live="polite" className={`mt-3 rounded-lg p-3 text-base font-bold ${checkSelection ? (selectionCorrect ? "bg-leaf text-leafdark" : "bg-redsoft text-redder") : "text-ink"}`}>
+          {checkSelection && !selectionCorrect ? `Not quite. ${scene.check.hint} Try again!` : checkPassed ? "That's right! You can move on." : "Choose an answer before moving on."}
         </p>
       </section>
 

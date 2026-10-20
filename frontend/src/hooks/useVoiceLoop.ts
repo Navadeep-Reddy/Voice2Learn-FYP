@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { synthesizeSpeech, transcribeAudio } from "../api";
 import type { VoiceState } from "../types";
 
-/** Friendly recoverable prompt used for empty/unrecognized/failed turns. */
+/** Used only when audio capture or transcription fails. */
 export const FRIENDLY_RETRY = "I didn't catch that. Try again.";
 
 /** VAD measurement poll only (not a recording/transcription interval). */
@@ -17,14 +17,6 @@ const SILENCE_END_MS = 800;
 const MAX_UTTERANCE_MS = 14000;
 /** Brief pause on the error visual before the spoken retry. */
 const ERROR_PAUSE_MS = 1200;
-
-function supportsSpeech(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    "speechSynthesis" in window &&
-    typeof SpeechSynthesisUtterance !== "undefined"
-  );
-}
 
 function supportsMonitoring(): boolean {
   return (
@@ -56,51 +48,17 @@ function rmsOf(buffer: Uint8Array): number {
   return Math.sqrt(sum / buffer.length);
 }
 
-const PREFERRED_VOICE_NAMES = [
-  "samantha",
-  "ava",
-  "jenny",
-  "aria",
-  "google us english",
-  "natural",
-  "neural",
-  "zira",
-];
-
-function pickEnglishVoice(
-  voices: SpeechSynthesisVoice[],
-): SpeechSynthesisVoice | null {
-  const english = voices.filter((voice) =>
-    voice.lang.toLowerCase().startsWith("en"),
-  );
-  if (english.length === 0) {
-    return null;
-  }
-  const scored = english.map((voice) => {
-    const name = voice.name.toLowerCase();
-    const preference = PREFERRED_VOICE_NAMES.findIndex((hint) =>
-      name.includes(hint),
-    );
-    return {
-      voice,
-      preference: preference === -1 ? PREFERRED_VOICE_NAMES.length : preference,
-      usFirst: voice.lang.toLowerCase() === "en-us" ? 0 : 1,
-    };
-  });
-  scored.sort(
-    (a, b) => a.preference - b.preference || a.usFirst - b.usFirst,
-  );
-  return scored[0].voice;
-}
-
 export interface VoiceLoop {
   voiceState: VoiceState;
   notice: string | null;
+  lastTranscript: string | null;
+  speechError: string | null;
   voiceActive: boolean;
   toggleMic: () => void;
+  prepareSpeech: () => void;
   speak: (text: string, onDone?: () => void) => void;
   cancelSpeech: () => void;
-  reportUnrecognized: () => void;
+  reportUnrecognized: (guidance: string) => void;
   sayAndShow: (text: string) => void;
 }
 
@@ -109,6 +67,8 @@ export function useVoiceLoop(
 ): VoiceLoop {
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [notice, setNotice] = useState<string | null>(null);
+  const [lastTranscript, setLastTranscript] = useState<string | null>(null);
+  const [speechError, setSpeechError] = useState<string | null>(null);
   const [voiceActive, setVoiceActive] = useState(false);
 
   const stateRef = useRef<VoiceState>("idle");
@@ -136,10 +96,27 @@ export function useVoiceLoop(
   const speechSeqRef = useRef(0);
   const noiseFloorRef = useRef(0.01);
   const lastSpeechRef = useRef(0);
-  const voicesRef = useRef<SpeechSynthesisVoice[]>([]);
+  const speechTimerRef = useRef<number | null>(null);
   const neuralAbortRef = useRef<AbortController | null>(null);
-  const neuralAudioRef = useRef<HTMLAudioElement | null>(null);
-  const neuralUrlRef = useRef<string | null>(null);
+  const neuralAudioRef = useRef<AudioBufferSourceNode | null>(null);
+  const speechContextRef = useRef<AudioContext | null>(null);
+
+  const prepareSpeech = useCallback(() => {
+    const Constructor = audioContextConstructor();
+    if (!Constructor) return;
+    try {
+      const context = speechContextRef.current ?? new Constructor();
+      speechContextRef.current = context;
+      if (context.state === "suspended") {
+        // Invoke resume inside the initial click/key gesture, before any fetch.
+        void context.resume().catch(() => {
+          console.warn("Neural audio context could not be activated.");
+        });
+      }
+    } catch {
+      console.warn("Neural audio context is unavailable.");
+    }
+  }, []);
 
   const setState = useCallback((next: VoiceState) => {
     stateRef.current = next;
@@ -225,11 +202,20 @@ export function useVoiceLoop(
     // Invalidate the active utterance first so any queued onend/onerror
     // from the canceled utterance no-ops instead of advancing state.
     speechSeqRef.current += 1;
+    if (speechTimerRef.current !== null) {
+      window.clearTimeout(speechTimerRef.current);
+      speechTimerRef.current = null;
+    }
     neuralAbortRef.current?.abort();
     neuralAbortRef.current = null;
-    if (neuralAudioRef.current) { neuralAudioRef.current.pause(); neuralAudioRef.current = null; }
-    if (neuralUrlRef.current) { URL.revokeObjectURL(neuralUrlRef.current); neuralUrlRef.current = null; }
-    if (supportsSpeech()) {
+    if (neuralAudioRef.current) {
+      neuralAudioRef.current.onended = null;
+      try { neuralAudioRef.current.stop(); } catch { /* Already stopped. */ }
+      neuralAudioRef.current.disconnect();
+      neuralAudioRef.current = null;
+    }
+    // Clear any browser utterance left by an older hot-reloaded client.
+    if ("speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
   }, []);
@@ -270,9 +256,6 @@ export function useVoiceLoop(
     }
     const current = stateRef.current;
     if (current === "listening" || current === "processing") {
-      return;
-    }
-    if (supportsSpeech() && window.speechSynthesis.speaking) {
       return;
     }
     // Idempotent while already monitoring: never duplicate recorder/analyser.
@@ -396,7 +379,6 @@ export function useVoiceLoop(
         failWithRetry();
       };
       recorderRef.current = recorder;
-      setNotice(null);
       setState("listening");
       recorder.start(TIMESLICE_MS);
       clearVadTimer();
@@ -529,6 +511,8 @@ export function useVoiceLoop(
         resumeSilently();
         return;
       }
+      setLastTranscript(text.trim());
+      setNotice(null);
       transcriptRef.current(text);
     } catch {
       if (generation !== captureGenRef.current) {
@@ -547,57 +531,51 @@ export function useVoiceLoop(
       // TTS takes over: stop monitoring/recording and discard partial input.
       discardClip();
       clearErrorTimer();
-      if (!supportsSpeech()) {
-        // No TTS available: run the completion (if any) immediately instead
-        // of auto-resuming first; otherwise resume listening if activated.
-        if (onDone) {
-          setState("processing");
-          onDone();
-        } else if (activeRef.current) {
-          void startListening();
-        } else {
-          setState("idle");
-        }
-        return;
-      }
       // Single sequence step, ordered clearly: invalidate the prior
       // utterance first, cancel it once, then the value below is this new
       // utterance's identity. Stale onstart/onend/onerror no-op against it.
       cancelSpeech();
       const seq = speechSeqRef.current;
-      const utterance = new SpeechSynthesisUtterance(text);
-      const availableVoices =
-        voicesRef.current.length > 0
-          ? voicesRef.current
-          : window.speechSynthesis.getVoices();
-      const voice = pickEnglishVoice(availableVoices);
-      if (voice) {
-        utterance.voice = voice;
-        utterance.lang = voice.lang;
-      }
-      utterance.rate = 0.92;
-      utterance.pitch = 1;
-      utterance.volume = 1;
+      setSpeechError(null);
       let finished = false;
-      utterance.onstart = () => {
-        if (finished || seq !== speechSeqRef.current) {
-          return;
-        }
-        setState("speaking");
-      };
-      const finish = () => {
+      const finish = (failure?: { stage: string; error: unknown }) => {
         if (finished || seq !== speechSeqRef.current) {
           return;
         }
         finished = true;
+        neuralAbortRef.current?.abort();
         neuralAbortRef.current = null;
+        if (neuralAudioRef.current) {
+          neuralAudioRef.current.onended = null;
+          try { neuralAudioRef.current.stop(); } catch { /* Already stopped. */ }
+          neuralAudioRef.current.disconnect();
+        }
         neuralAudioRef.current = null;
-        if (neuralUrlRef.current) { URL.revokeObjectURL(neuralUrlRef.current); neuralUrlRef.current = null; }
+        if (failure) {
+          const name = failure.error instanceof Error ? failure.error.name : "UnknownError";
+          const status = failure.error && typeof failure.error === "object" && "status" in failure.error
+            && typeof failure.error.status === "number" ? failure.error.status : undefined;
+          setSpeechError(name === "NotAllowedError"
+            ? "Your browser blocked sound. Tap the microphone to enable audio."
+            : "Audio is unavailable. You can keep learning with the text below.");
+          setNotice(text);
+          console.warn("Neural speech failed", { stage: failure.stage, name, status });
+        }
         // With a completion callback, the caller sequences the next step
         // (next question, results) instead of auto-resuming first.
         if (onDone) {
           setState("processing");
-          onDone();
+          if (failure) {
+            // Keep graded feedback readable if audio fails, then preserve the
+            // existing automatic continuation without introducing another voice.
+            const readingTime = Math.min(12000, Math.max(4000, text.split(/\s+/).length * 350));
+            speechTimerRef.current = window.setTimeout(() => {
+              speechTimerRef.current = null;
+              if (seq === speechSeqRef.current) onDone();
+            }, readingTime);
+          } else {
+            onDone();
+          }
         } else if (activeRef.current) {
           setState("idle");
           void startListening();
@@ -605,29 +583,31 @@ export function useVoiceLoop(
           setState("idle");
         }
       };
-      utterance.onend = finish;
-      utterance.onerror = finish;
-      // Neural speech is preferred; browser voice is the offline/error fallback.
+      // One audio source only: the backend's female neural voice.
       const controller = new AbortController();
       neuralAbortRef.current = controller;
       setState("processing");
+      let stage = "synthesis";
       void synthesizeSpeech(text, controller.signal).then(async (blob) => {
-        if (seq !== speechSeqRef.current) return;
-        const url = URL.createObjectURL(blob);
-        neuralUrlRef.current = url;
-        const audio = new Audio(url);
+        if (seq !== speechSeqRef.current || finished) return;
+        const context = speechContextRef.current;
+        if (!context || context.state !== "running") {
+          stage = "audio-activation";
+          throw new DOMException("Audio needs an initial user activation", "NotAllowedError");
+        }
+        stage = "audio-decode";
+        const buffer = await context.decodeAudioData(await blob.arrayBuffer());
+        if (seq !== speechSeqRef.current || finished) return;
+        const audio = context.createBufferSource();
+        audio.buffer = buffer;
+        audio.connect(context.destination);
         neuralAudioRef.current = audio;
-        audio.onended = finish;
-        audio.onerror = () => {
-          if (seq === speechSeqRef.current && !finished) {
-            audio.onerror = null;
-            window.speechSynthesis.speak(utterance);
-          }
-        };
-        await audio.play();
-        if (seq === speechSeqRef.current) setState("speaking");
-      }).catch(() => {
-        if (seq === speechSeqRef.current) window.speechSynthesis.speak(utterance);
+        audio.onended = () => finish();
+        stage = "audio-playback";
+        audio.start();
+        if (seq === speechSeqRef.current && !finished) setState("speaking");
+      }).catch((error: unknown) => {
+        finish({ stage, error });
       });
     },
     [cancelSpeech, clearErrorTimer, discardClip, setState, startListening],
@@ -642,9 +622,9 @@ export function useVoiceLoop(
     [speak],
   );
 
-  const reportUnrecognized = useCallback(() => {
-    failWithRetry();
-  }, [failWithRetry]);
+  const reportUnrecognized = useCallback((guidance: string) => {
+    sayAndShow(guidance);
+  }, [sayAndShow]);
 
   const toggleMic = useCallback(() => {
     if (activeRef.current) {
@@ -664,6 +644,7 @@ export function useVoiceLoop(
     activeRef.current = true;
     setVoiceActive(true);
     setNotice(null);
+    prepareSpeech();
     void startListening();
   }, [
     cancelSpeech,
@@ -673,32 +654,17 @@ export function useVoiceLoop(
     setState,
     startListening,
     stopTracks,
+    prepareSpeech,
   ]);
 
   useEffect(() => {
-    if (supportsSpeech()) {
-      const loadVoices = () => {
-        voicesRef.current = window.speechSynthesis.getVoices();
-      };
-      loadVoices();
-      window.speechSynthesis.addEventListener("voiceschanged", loadVoices);
-      return () => {
-        window.speechSynthesis.removeEventListener(
-          "voiceschanged",
-          loadVoices,
-        );
-        activeRef.current = false;
-        clearErrorTimer();
-        discardClip();
-        cancelSpeech();
-        stopTracks();
-        closeAudioContext();
-      };
-    }
     return () => {
       activeRef.current = false;
       clearErrorTimer();
       discardClip();
+      cancelSpeech();
+      void speechContextRef.current?.close().catch(() => {});
+      speechContextRef.current = null;
       stopTracks();
       closeAudioContext();
     };
@@ -713,8 +679,11 @@ export function useVoiceLoop(
   return {
     voiceState,
     notice,
+    lastTranscript,
+    speechError,
     voiceActive,
     toggleMic,
+    prepareSpeech,
     speak,
     cancelSpeech,
     reportUnrecognized,

@@ -36,7 +36,7 @@ The demo should prove:
 - Voice navigation and authored scene understanding checks
 - Contextual lesson Q&A with Nemotron
 - Local Whisper STT
-- Neural TTS with browser speech synthesis fallback
+- Female neural TTS with text-only recovery when speech is unavailable
 - Five-question quiz
 - One Nemotron-generated MCQ at a time
 - Deterministic quiz grading
@@ -88,9 +88,9 @@ The demo should prove:
 - Tutor + question generation: Nemotron through NVIDIA Integrate first
   (`nvidia/nemotron-3-super-120b-a12b`), with OpenRouter fallback
   (`nvidia/nemotron-3-super-120b-a12b:free`)
-- TTS: backend neural speech (`edge-tts`, network required) with browser `speechSynthesis` fallback
+- TTS: backend female neural speech (`edge-tts`, network required); no browser/system voice playback
 
-The frontend calls only the application backend. Nemotron access uses NVIDIA Integrate as primary and OpenRouter as fallback through `backend/app/llm.py`. Jev has its own backend client and key; its failures do not fall back to Nemotron. Neural TTS and browser TTS retain their existing fallback behavior.
+The frontend calls only the application backend. Nemotron access uses NVIDIA Integrate as primary and OpenRouter as fallback through `backend/app/llm.py`. Jev has its own backend client and key; its failures do not fall back to Nemotron. At the user's request, neural TTS is the only speech source; failed speech displays text rather than using a browser/system voice.
 
 ## 5. Screens
 
@@ -680,7 +680,9 @@ Restores the demo learner to the initial state and clears the active quiz questi
 
 ### `POST /api/tts/speak`
 
-Existing neural TTS boundary. Input `{ "text": "..." }` (1–2500 characters); returns `audio/mpeg`. Uses configured `VOICE2LEARN_TTS_VOICE`, default `en-US-JennyNeural`, via networked `edge-tts`. Unavailable/failed synthesis returns a friendly 503; frontend falls back to browser speech. Cancel stale fetch/audio on navigation, suppress recording during either speech path, and resume listening after completion. Do not send API credentials to the frontend.
+Existing neural TTS boundary. Input `{ "text": "..." }` (1–2500 characters); returns `audio/mpeg`. Uses configured `VOICE2LEARN_TTS_VOICE`, default `en-US-JennyNeural`, via networked `edge-tts`. Unavailable/failed synthesis returns a friendly 503; frontend displays the message as text without browser/system speech. Resume listening after failure; graded feedback with automatic continuation gets a bounded reading delay (4–12 seconds) before advancing. Cancel stale fetch/audio/timers on navigation, suppress recording during speech, and resume listening after completion. Back/Home from the first scene confirms Home and resumes listening. Do not send API credentials to the frontend.
+
+Activate a reusable Web Audio playback context during the initial microphone/click/key gesture; decode and play subsequent neural audio through it without requiring another physical action. Distinguish synthesis HTTP errors from browser activation/decoding/playback errors in safe console diagnostics. Display the latest transcript and recoverable app message in normal page flow, with audio status separate; preserve a reserved microphone area so the conversation never overlays lesson controls.
 
 ## 13. Error Behavior
 
@@ -723,7 +725,7 @@ The five existing lesson scenes each include one authored, four-option understan
 
 During the quiz, an expandable authored lesson recap is viewable and readable aloud by voice, while the current question and progress remain unchanged. Quiz answers remain hidden before submission; recap content is the public lesson narration only. Essential voice operations across screens include help, repetition, lesson navigation, check selection/retry, quiz recap open/close/read, answering, retry on load error, and results navigation. Invalid commands stay on the current screen with a friendly prompt.
 
-TTS prefers a configurable neural speech voice through a small backend endpoint; if unavailable it falls back to browser speech synthesis. Spoken audio must pause STT and resume listening afterward, with cancellation on navigation. Neural TTS requires network availability; it must not download a local model or expose credentials. The original five-question Nemotron quiz, four screens, and proficiency rules remain unchanged.
+TTS uses a configurable female neural speech voice through a small backend endpoint; if unavailable it displays text without switching to a browser/system voice. Spoken audio must pause STT and resume listening afterward, with cancellation on navigation. Neural TTS requires network availability; it must not download a local model or expose credentials. The original five-question Nemotron quiz, four screens, and proficiency rules remain unchanged.
 
 
 ## 16. Jev Architecture and Provider Boundary (planned)
@@ -737,7 +739,7 @@ Microphone → browser speech/silence detection → complete utterance
   → navigation / repeat / help / checks / notes: application code
   → ask-question: ORIGINAL transcript + scene → Nemotron tutor → answer
   → select-option: deterministic backend quiz grading → learner JSON
-→ neural TTS (browser speech fallback) → automatic listening resume
+→ female neural TTS (text-only recovery on failure) → automatic listening resume
 ```
 
 Jev selects the specific action in one call. Do not first classify navigation versus learning and then make a second dependent model call to identify navigation. Navigation never needs Nemotron. Nemotron remains the tutor and one-at-a-time quiz generator through the existing NVIDIA/OpenRouter boundary. Authored lesson checks remain deterministically compared in application code, without quiz proficiency writes; do not claim they are backend graded today.

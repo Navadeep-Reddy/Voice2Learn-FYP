@@ -57,7 +57,7 @@ export default function ResultsScreen({
   onRetakeQuiz,
 }: Props) {
   return (
-    <div className="mx-auto w-full max-w-[1120px] px-5 pb-36 pt-6 md:px-16 md:pt-10">
+    <div className="mx-auto w-full max-w-[1120px] px-5 pb-8 pt-6 md:px-16 md:pt-10">
       <h1 className="type-title text-center text-ink">
         Great job, {studentName}!
       </h1>

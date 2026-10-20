@@ -109,7 +109,7 @@ class SpeechRequest(BaseModel):
 
 @app.post("/api/tts/speak")
 async def synthesize_speech(body: SpeechRequest) -> Response:
-    """Optional neural voice; client falls back to built-in speech on failure."""
+    """Female neural narration; client displays text if speech is unavailable."""
     try:
         import edge_tts
 
@@ -124,6 +124,11 @@ async def synthesize_speech(body: SpeechRequest) -> Response:
         if not audio:
             raise ValueError("no speech returned")
         return Response(content=bytes(audio), media_type="audio/mpeg")
-    except Exception:  # noqa: BLE001 - never leak provider failure to child
-        log.warning("neural narration unavailable; client will use browser voice", exc_info=True)
-        raise HTTPException(status_code=503, detail="Speech is unavailable. Using browser voice.")
+    except Exception as exc:  # noqa: BLE001 - never leak provider failure to child
+        status = getattr(exc, "status", None)
+        log.warning(
+            "Neural narration failed (%s, HTTP status=%s); client will display text",
+            type(exc).__name__,
+            status if isinstance(status, int) else "unavailable",
+        )
+        raise HTTPException(status_code=503, detail="Voice is unavailable right now. You can read the message on screen.")

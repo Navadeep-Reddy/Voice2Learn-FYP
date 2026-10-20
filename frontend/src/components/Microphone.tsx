@@ -3,7 +3,6 @@ import type { VoiceState } from "../types";
 interface Props {
   voiceState: VoiceState;
   voiceActive: boolean;
-  hint: string | null;
   onToggle: () => void;
 }
 
@@ -26,26 +25,16 @@ const STATE_STYLES: Record<VoiceState, string> = {
 export default function Microphone({
   voiceState,
   voiceActive,
-  hint,
   onToggle,
 }: Props) {
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-5 z-20 flex flex-col items-center px-4">
-      {hint && (
-        <p
-          role="status"
-          aria-live="polite"
-          className="pointer-events-auto mb-3 max-w-md rounded-full bg-surface px-4 py-2 text-center text-sm font-bold text-ink shadow"
-        >
-          {hint}
-        </p>
-      )}
       <button
         type="button"
         onClick={onToggle}
         aria-label={`Microphone: ${LABELS[voiceState]}`}
         aria-pressed={voiceActive}
-        className={`tactile pointer-events-auto relative flex h-[76px] w-[76px] items-center justify-center rounded-full text-3xl ${STATE_STYLES[voiceState]}`}
+        className={`tactile v2l-microphone pointer-events-auto relative flex h-[76px] w-[76px] items-center justify-center rounded-full text-3xl ${STATE_STYLES[voiceState]}`}
       >
         {voiceState === "processing" && (
           <span

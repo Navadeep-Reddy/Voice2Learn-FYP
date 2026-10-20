@@ -44,7 +44,7 @@ Do not invent requirements to resolve ambiguity. Prefer the smallest implementat
 - Lesson Q&A uses the Nemotron AI tutor with current lesson/scene context.
 - Target: every accepted non-empty STT turn goes through POST /api/intent/classify to Jev through Vercel AI Gateway, using screen and interaction state. Until Pass 8, the endpoint retains the current Nemotron boundary. No frontend exact phrase matching or automatic Nemotron classifier fallback after the switch.
 - Jev chooses one specific allowed action; application code executes it. Conceptual lesson help forwards the original transcript and scene to Nemotron. Quiz grading stays deterministic in the backend; authored check comparison stays separate from proficiency writes.
-- Preserve check gating, Back-to-Home on the first scene, help, quiz notes, error retry, VAD utterances and neural/browser TTS. Do not claim known incomplete voice wiring works before verification.
+- Preserve check gating, Back-to-Home on the first scene, help, quiz notes, error retry, VAD utterances and female neural TTS. Per the user's explicit speech revision, do not restore the robotic browser/system voice fallback; use text-only recovery on speech failure. Do not claim known incomplete voice wiring works before verification.
 - General commands resolve actual loaded lesson IDs/titles/concepts; no hardcoded lesson topics or invented destinations. Planned jump/resume/pacing/exit actions follow SPEC Section 17 and their own passes. Never bypass checks or reveal/solve quiz answers.
 - Quiz questions are **fully Nemotron-generated**, generated **one at a time**, and are **multiple-choice only**.
 - Quiz grading is deterministic in the backend.
@@ -65,7 +65,7 @@ Temporary Pre-Review implementations must sit behind small stable interfaces:
 - NVIDIA-primary/OpenRouter-fallback Nemotron client -> isolated provider integrations behind one LLM boundary
 - backend Jev intent classifier -> small replaceable screen/state-aware boundary preserving current HTTP actions during core migration
 - Vercel TypeSafe-compatible Jev client -> isolated backend/app/jev.py, separate from llm.py and Nemotron providers; validation/acceptance/execution owned by application code
-- neural speech endpoint -> existing edge-tts with browser speech fallback; no model downloads
+- neural speech endpoint -> existing edge-tts female voice with text-only failure recovery; no browser/system speech or model downloads
 - context builder -> generates `backend/data/context.md` and is reused by lesson Q&A, quiz generation, and intent classification
 - authored lesson JSON -> later replaceable by a larger lesson/content source
 
@@ -104,7 +104,7 @@ Prefer explicit code over clever abstractions.
 - Keep all student-facing copy age-appropriate and short.
 - Keep AI Gateway/NVIDIA/OpenRouter keys server-side in ignored backend/.env. Never put them in VITE_ variables, command arguments, logs, screenshots, reports, commits or chat. Use placeholders in examples and sanitize provider errors. Do not ask the user to paste keys into chat.
 - Do not expose the quiz answer to the frontend before submission.
-- Invalid model output retries once, then friendly recoverable error. Valid low-confidence Jev output returns unclear without retry. Jev config/auth/access/network/timeout/non-2xx fails without retry/fallback per SPEC. Preserve the existing Nemotron and speech fallback policies independently.
+- Invalid model output retries once, then friendly recoverable error. Valid low-confidence Jev output returns unclear without retry. Jev config/auth/access/network/timeout/non-2xx fails without retry/fallback per SPEC. Preserve the existing Nemotron provider fallback independently of the user-requested neural-only speech/text-recovery policy.
 
 ## Local Whisper Rule
 

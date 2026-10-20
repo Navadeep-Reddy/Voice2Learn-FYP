@@ -49,7 +49,7 @@ export default function QuizScreen({
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1120px] px-5 pb-36 pt-6 md:px-16 md:pt-10">
+    <div className="mx-auto w-full max-w-[1120px] px-5 pb-8 pt-6 md:px-16 md:pt-10">
       <div className="flex items-center justify-center">
         <p
           className="rounded-full bg-subtle px-4 py-1 text-sm font-bold text-muted"

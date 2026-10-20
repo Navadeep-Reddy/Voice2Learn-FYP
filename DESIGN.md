@@ -229,6 +229,8 @@ Placement:
 - label below or immediately adjacent;
 - content must leave space for it.
 
+Reserve a separate bottom area for the fixed microphone and its state label; the main content scrolls above that area. Place the latest “You said” transcript and app reply in normal page flow below the header, in rounded surface/subtle cards (side by side when space permits, stacked on narrow screens). Keep an audio-error banner separate from the reply. Long text may scroll within its card, but must not float over lesson options or controls.
+
 Target size:
 
 - roughly `72–80px` on desktop;

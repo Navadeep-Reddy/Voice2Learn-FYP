@@ -263,7 +263,7 @@ async def classify_intent(body: IntentClassifyRequest) -> IntentClassifyResponse
         try:
             content = await llm.chat_completion(messages)
         except llm.LLMError:
-            log.warning("intent provider call failed", exc_info=True)
+            log.warning("Intent classification failed: both Nemotron providers unavailable; see provider diagnostics")
             raise HTTPException(status_code=502, detail=FRIENDLY_INTENT_ERROR)
         except Exception:  # noqa: BLE001 - never leak internals
             log.exception("intent call failed")
@@ -272,7 +272,7 @@ async def classify_intent(body: IntentClassifyRequest) -> IntentClassifyResponse
             return parse_intent(content, set(allowed), is_final)
         except (ValueError, json.JSONDecodeError) as exc:
             last_error = exc
-            log.warning("intent invalid output, retrying", exc_info=True)
+            log.warning("Intent output rejected (%s); retrying", str(exc))
             continue
     log.warning("intent invalid output twice: %s", last_error)
     raise HTTPException(status_code=502, detail=FRIENDLY_INTENT_ERROR)

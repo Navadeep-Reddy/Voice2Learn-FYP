@@ -13,6 +13,7 @@ import { useVoiceLoop } from "./hooks/useVoiceLoop";
 import Header from "./components/Header";
 import FloatingBackground from "./components/FloatingBackground";
 import Microphone from "./components/Microphone";
+import VoiceStatus from "./components/VoiceStatus";
 import HomeScreen from "./components/HomeScreen";
 import LessonScreen from "./components/LessonScreen";
 import QuizScreen from "./components/QuizScreen";
@@ -43,6 +44,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [screen, setScreen] = useState<Screen>("home");
+  const contentRef = useRef<HTMLElement | null>(null);
   const [sceneIndex, setSceneIndex] = useState(0);
   const [passedChecks, setPassedChecks] = useState<string[]>([]);
   const [checkSelection, setCheckSelection] = useState<QuizOptionId | null>(null);
@@ -123,6 +125,11 @@ export default function App() {
     setCheckSelection(null);
     setSceneIndex(0);
     setScreen("lesson");
+  }, []);
+
+  const goHome = useCallback(() => {
+    setScreen("home");
+    voiceRef.current?.sayAndShow('You are on Home. Say “start lesson” to begin.');
   }, []);
 
   const handleResetDemo = useCallback(() => {
@@ -432,6 +439,15 @@ export default function App() {
         return;
       }
       const currentScreen = screenRef.current;
+      const reportUnrecognized = () => {
+        const guidance = {
+          home: 'You are on Home. Say “start lesson” to begin.',
+          lesson: 'Try an answer choice, “next”, “back”, “repeat”, or ask a question.',
+          quiz: 'Try an answer choice, “repeat question”, or “show lesson notes”.',
+          results: 'Say “review lesson” or “take quiz again”.',
+        };
+        voice.reportUnrecognized(guidance[currentScreen]);
+      };
       if (result.action === "help") {
         const help = { home: "Say start lesson.", lesson: "Say a letter to answer the quick check, next, back, repeat, or ask a question.", quiz: "Say a letter to answer, repeat question, show lesson notes, hide notes, or read notes.", results: "Say review lesson or take quiz again." };
         voice.sayAndShow(help[currentScreen]);
@@ -441,7 +457,7 @@ export default function App() {
         if (result.action === "start-lesson") {
           goLesson();
         } else {
-          voice.reportUnrecognized();
+          reportUnrecognized();
         }
         return;
       }
@@ -463,10 +479,10 @@ export default function App() {
           if (snap.question && !snap.quizLoading) {
             speakQuestion(snap.question, quizIndexRef.current);
           } else {
-            voice.reportUnrecognized();
+            reportUnrecognized();
           }
         } else {
-          voice.reportUnrecognized();
+          reportUnrecognized();
         }
         return;
       }
@@ -476,13 +492,13 @@ export default function App() {
         } else if (result.action === "retake-quiz") {
           startQuiz();
         } else {
-          voice.reportUnrecognized();
+          reportUnrecognized();
         }
         return;
       }
       const currentLesson = lessonRef.current;
       if (!currentLesson) {
-        voice.reportUnrecognized();
+        reportUnrecognized();
         return;
       }
       const index = sceneRef.current;
@@ -490,8 +506,7 @@ export default function App() {
       if (result.action === "select-check" && result.option) {
         selectCheck(result.option);
       } else if (result.action === "home") {
-        voice.cancelSpeech();
-        setScreen("home");
+        goHome();
       } else if (result.action === "next") {
         if (!passedRef.current.includes(currentLesson.scenes[index].id)) {
           voice.sayAndShow("Answer the quick check first.");
@@ -505,8 +520,7 @@ export default function App() {
         }
       } else if (result.action === "back") {
         if (index === 0) {
-          voice.cancelSpeech();
-          setScreen("home");
+          goHome();
         } else {
           setCheckSelection(null);
           setSceneIndex(index - 1);
@@ -516,17 +530,17 @@ export default function App() {
       } else if (result.action === "start-quiz") {
         // Never leave the lesson early on a malformed result.
         if (!isLast) {
-          voice.reportUnrecognized();
+          reportUnrecognized();
           return;
         }
         startQuiz();
       } else if (result.action === "ask-question") {
         askLessonQuestion(rawText, currentLesson.scenes[index].id, index);
       } else {
-        voice.reportUnrecognized();
+        reportUnrecognized();
       }
     },
-    [askLessonQuestion, goLesson, reviewLesson, retryQuizLoad, selectCheck, speakQuestion, startQuiz, submitAnswer],
+    [askLessonQuestion, goHome, goLesson, reviewLesson, retryQuizLoad, selectCheck, speakQuestion, startQuiz, submitAnswer],
   );
 
   const handleTranscript = useCallback(
@@ -548,6 +562,7 @@ export default function App() {
       const requestQuizSeq = quizSeqRef.current;
       const requestQuestionId = quizSnapRef.current.question?.question_id ?? null;
       const requestQuestion = quizSnapRef.current.question;
+      const requestCheck = lessonRef.current?.scenes[requestScene]?.check;
       intentPendingRef.current = true;
       intentSeqRef.current += 1;
       const seq = intentSeqRef.current;
@@ -558,6 +573,8 @@ export default function App() {
               screen: requestScreen,
               scene_id:
                 lessonRef.current?.scenes[requestScene]?.id ?? "",
+              check_question: requestCheck?.question,
+              check_options: requestCheck?.options,
             }
           : requestScreen === "quiz" && requestQuestion
             ? {
@@ -605,7 +622,7 @@ export default function App() {
             err instanceof Error && err.message
               ? err.message
               : "My helper is having trouble right now. Try again.";
-          voice.speak(friendly);
+          voice.sayAndShow(friendly);
         } finally {
           if (intentSeqRef.current === seq) {
             intentPendingRef.current = false;
@@ -646,6 +663,10 @@ export default function App() {
     clearTutor();
   }, [screen, sceneIndex, clearTutor]);
 
+  useEffect(() => {
+    contentRef.current?.scrollTo({ top: 0 });
+  }, [screen, sceneIndex, quizIndex]);
+
   // Invalidate any in-flight intent classification after navigation or a new
   // quiz question; the stale result is discarded by the sequence guard.
   useEffect(() => {
@@ -663,21 +684,23 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-canvas">
+      <div className="flex h-dvh flex-col overflow-hidden bg-canvas pb-36" onPointerDownCapture={voice.prepareSpeech} onKeyDownCapture={voice.prepareSpeech}>
         <Header />
-        <main className="relative z-10 mx-auto max-w-[1120px] px-5 pb-36 pt-10 md:px-16">
-          <div className="rounded-xl border border-line bg-surface p-8 text-center">
-            <p className="type-card text-ink">Loading Voice2Learn…</p>
-            <p className="mt-2 text-base text-muted">
-              Getting your lesson ready.
-            </p>
+        <main ref={contentRef} className="relative z-10 min-h-0 flex-1 overflow-y-auto">
+          <VoiceStatus transcript={voice.lastTranscript} message={voice.notice} speechError={voice.speechError} />
+          <div className="mx-auto w-full max-w-[1120px] px-5 pb-8 pt-10 md:px-16">
+            <div className="rounded-xl border border-line bg-surface p-8 text-center">
+              <p className="type-card text-ink">Loading Voice2Learn…</p>
+              <p className="mt-2 text-base text-muted">
+                Getting your lesson ready.
+              </p>
+            </div>
           </div>
         </main>
         <FloatingBackground />
         <Microphone
           voiceState={voice.voiceState}
           voiceActive={voice.voiceActive}
-          hint={voice.notice}
           onToggle={voice.toggleMic}
         />
       </div>
@@ -686,29 +709,31 @@ export default function App() {
 
   if (error || !lesson || !learner) {
     return (
-      <div className="min-h-screen bg-canvas">
+      <div className="flex h-dvh flex-col overflow-hidden bg-canvas pb-36" onPointerDownCapture={voice.prepareSpeech} onKeyDownCapture={voice.prepareSpeech}>
         <Header />
-        <main className="relative z-10 mx-auto max-w-[1120px] px-5 pb-36 pt-10 md:px-16">
-          <div className="rounded-xl border border-line bg-surface p-8 text-center">
-            <h1 className="type-card text-ink">Oh no!</h1>
-            <p className="mt-2 text-base text-muted">
-              I could not load your lesson. Check your connection and try
-              again. {error ?? ""}
-            </p>
-            <button
-              type="button"
-              onClick={() => window.location.reload()}
-              className="tactile mt-6 min-h-[48px] bg-brand px-6 py-3 text-base font-bold text-white"
-            >
-              Try again
-            </button>
+        <main ref={contentRef} className="relative z-10 min-h-0 flex-1 overflow-y-auto">
+          <VoiceStatus transcript={voice.lastTranscript} message={voice.notice} speechError={voice.speechError} />
+          <div className="mx-auto w-full max-w-[1120px] px-5 pb-8 pt-10 md:px-16">
+            <div className="rounded-xl border border-line bg-surface p-8 text-center">
+              <h1 className="type-card text-ink">Oh no!</h1>
+              <p className="mt-2 text-base text-muted">
+                I could not load your lesson. Check your connection and try
+                again. {error ?? ""}
+              </p>
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="tactile mt-6 min-h-[48px] bg-brand px-6 py-3 text-base font-bold text-white"
+              >
+                Try again
+              </button>
+            </div>
           </div>
         </main>
         <FloatingBackground />
         <Microphone
           voiceState={voice.voiceState}
           voiceActive={voice.voiceActive}
-          hint={voice.notice}
           onToggle={voice.toggleMic}
         />
       </div>
@@ -717,9 +742,10 @@ export default function App() {
 
 
   return (
-    <div className="min-h-screen bg-canvas">
+    <div className="flex h-dvh flex-col overflow-hidden bg-canvas pb-36" onPointerDownCapture={voice.prepareSpeech} onKeyDownCapture={voice.prepareSpeech}>
       <Header />
-      <main className="relative z-10">
+      <main ref={contentRef} className="relative z-10 min-h-0 flex-1 overflow-y-auto">
+        <VoiceStatus transcript={voice.lastTranscript} message={voice.notice} speechError={voice.speechError} />
         <div key={screen} className="v2l-stage-in">
           {screen === "home" ? (
             <HomeScreen
@@ -733,11 +759,8 @@ export default function App() {
             <LessonScreen
               lesson={lesson}
               sceneIndex={sceneIndex}
-              onHome={() => {
-                voice.cancelSpeech();
-                setScreen("home");
-              }}
-              onBack={() => { setCheckSelection(null); if (sceneIndex === 0) setScreen("home"); else setSceneIndex(sceneIndex - 1); }}
+              onHome={goHome}
+              onBack={() => { setCheckSelection(null); if (sceneIndex === 0) goHome(); else setSceneIndex(sceneIndex - 1); }}
               onNext={() => { if (passedChecks.includes(lesson.scenes[sceneIndex].id)) { setCheckSelection(null); setSceneIndex((i) => Math.min(lesson.scenes.length - 1, i + 1)); } }}
               onStartQuiz={startQuiz}
               checkPassed={passedChecks.includes(lesson.scenes[sceneIndex].id)}
@@ -765,7 +788,7 @@ export default function App() {
                 onToggleNotes={() => setNotesOpen((open) => !open)}
               />
             ) : (
-              <div className="mx-auto w-full max-w-[1120px] px-5 pb-36 pt-6 md:px-16 md:pt-10">
+              <div className="mx-auto w-full max-w-[1120px] px-5 pb-8 pt-6 md:px-16 md:pt-10">
                 <div className="rounded-xl border border-line bg-surface p-8 text-center">
                   {quizError ? (
                     <>
@@ -808,7 +831,6 @@ export default function App() {
       <Microphone
         voiceState={voice.voiceState}
         voiceActive={voice.voiceActive}
-        hint={voice.notice}
         onToggle={voice.toggleMic}
       />
     </div>

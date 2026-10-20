@@ -21,7 +21,7 @@ The **Pre-Review MVP** contains one Multiplication & Division lesson, contextual
 - 5 authored lesson scenes, each with a quick understanding check
 - Local Whisper STT
 - Nemotron via NVIDIA Integrate primary with OpenRouter fallback
-- Neural edge-tts speech with browser speech fallback
+- Female neural edge-tts speech; text-only recovery if audio is unavailable
 - 5 dynamically generated MCQs
 - backend Nemotron semantic intent routing (`POST /api/intent/classify`): every non-empty STT transcript is classified backend-side with current screen/context, so imperfect transcripts still map to the allowed screen action; the frontend never decides voice actions with exact local phrase matching
 - authored quiz lesson notes with voice open/close/read
@@ -49,7 +49,7 @@ No authentication, Supabase, extra curriculum, or final-model training is part o
 
 - local Whisper installation
 - Nemotron (`nvidia/nemotron-3-super-120b-a12b`) through NVIDIA Integrate first, falling back to OpenRouter (`nvidia/nemotron-3-super-120b-a12b:free`) for lesson Q&A, quiz generation, and semantic intent classification
-- backend `edge-tts` neural speech; browser `speechSynthesis` fallback (neural path requires network)
+- backend `edge-tts` female neural speech (network required); no browser/system voice playback
 
 The backend keeps NVIDIA and OpenRouter provider details behind one Nemotron
 LLM boundary; the frontend never calls either provider directly.
@@ -107,6 +107,10 @@ Local STT (Pass 3) uses the backend venv Whisper runtime directly in-process; no
 - `backend/app/stt.py` lazily loads the exact cached model snapshot a single time per backend process (`local_files_only=True`, CUDA float16 with CPU int8 fallback, pip-provided CUDA libs preloaded via `ctypes`).
 - Decoding favors short voice commands: beam search (`beam_size=5`), deterministic `temperature=0.0`, no previous-segment conditioning, `vad_filter` with short silence/padding, no timestamps, and a neutral concise lesson-context hint. The model stays local; nothing is downloaded.
 - `POST /api/stt/transcribe` accepts one complete browser audio utterance (`file` field) and returns `{ "text": string }`. The frontend captures speech-boundary utterances through continuous microphone monitoring (speech start/end with pre-roll and sustained-silence end; silence is never sent; a max utterance cap is only a runaway safety guard).
+- Neural speech requires `edge-tts>=7.3.1,<8`; older versions can receive HTTP 403 from Microsoft's speech service. Update the backend dependencies and restart the backend if this occurs. Only the configured neural voice is played (default `en-US-JennyNeural`). Speech failures display the message as text and resume listening; graded feedback remains readable briefly before automatic continuation. The robotic browser/system voice fallback has been removed at the user's request.
+- The latest non-empty Whisper transcript appears in an inline “You said” card below the header, alongside app messages. Audio errors have their own short banner. These cards scroll with the page content; the circular microphone remains in a reserved bottom area without covering lesson controls. Transcript display is session-only, not a stored history.
+- The initial microphone tap (or a click/key interaction with the app) unlocks a reusable Web Audio context for female neural narration. Later voice-triggered audio uses that context, avoiding browser autoplay rejection after asynchronous classification/synthesis. Browser console diagnostics distinguish synthesis HTTP failures, audio activation, decoding and playback failures without printing provider responses.
+- Backend provider diagnostics identify missing configuration, HTTP status/reason, transport exception type and malformed completions; neural-speech failures report exception type and HTTP status where available. Raw credentials, provider response bodies and signed speech URLs are excluded from these diagnostics.
 - Optional overrides live in `backend/.env.example` as `VOICE2LEARN_WHISPER_*` (`MODEL_DIR`, `DEVICE`, `COMPUTE_TYPE`, `INITIAL_PROMPT`); defaults reflect the original developer’s machine and may need local overrides.
 
 The frontend should use a configurable backend base URL, for example:
@@ -188,7 +192,7 @@ This repository is intentionally building a **focused Pre-Review vertical slice*
 
 ## Planned Jev Setup — Not Implemented on This Base
 
-The migration keeps local STT, neural/browser speech, lesson checks, notes, Nemotron tutoring/question generation, and backend quiz grading. Jev will classify intent through Vercel AI Gateway, separate from the existing NVIDIA/OpenRouter LLM boundary.
+The migration keeps local STT, female neural speech with text-only error recovery, lesson checks, notes, Nemotron tutoring/question generation, and backend quiz grading. Jev will classify intent through Vercel AI Gateway, separate from the existing NVIDIA/OpenRouter LLM boundary.
 
 After Pass 7 adds support, configure these backend-only settings in ignored `backend/.env`:
 
