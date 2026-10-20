@@ -163,6 +163,10 @@ def build_intent_context(
     is_final_scene: bool | None = None,
     quiz_question: str | None = None,
     quiz_options: list[dict[str, str]] | None = None,
+    check_question: str | None = None,
+    check_options: list[dict[str, str]] | None = None,
+    notes_open: bool = False,
+    quiz_error: bool = False,
 ) -> str:
     """Build screen-aware intent-classification context (visible data only)."""
     lines = [
@@ -202,6 +206,12 @@ def build_intent_context(
         else:
             lines.append("- (none yet)")
         lines.append("")
+    if check_question is not None and check_options is not None:
+        lines.extend(["## Visible understanding check (answer not provided)", check_question])
+        lines.extend(f"- {o['id']}: {o['text']}" for o in check_options)
+        lines.append("")
+    if screen == "quiz":
+        lines.append(f"- Lesson notes open: {notes_open}; question load failed: {quiz_error}")
     if quiz_question is not None and quiz_options is not None:
         lines.extend(
             [
@@ -234,6 +244,10 @@ def rebuild_intent_context(
     is_final_scene: bool | None = None,
     quiz_question: str | None = None,
     quiz_options: list[dict[str, str]] | None = None,
+    check_question: str | None = None,
+    check_options: list[dict[str, str]] | None = None,
+    notes_open: bool = False,
+    quiz_error: bool = False,
 ) -> str:
     content = build_intent_context(
         lesson,
@@ -246,6 +260,10 @@ def rebuild_intent_context(
         is_final_scene,
         quiz_question,
         quiz_options,
+        check_question,
+        check_options,
+        notes_open,
+        quiz_error,
     )
     write_context(content)
     return content

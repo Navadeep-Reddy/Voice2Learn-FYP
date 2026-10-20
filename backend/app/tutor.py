@@ -9,7 +9,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from . import openrouter
+from . import llm
 from .context_builder import rebuild_tutor_context
 from .models import Lesson
 from .state import read_learner_state
@@ -96,8 +96,8 @@ async def ask_tutor(body: TutorAskRequest) -> TutorAskResponse:
             {"role": "user", "content": context_text},
         ]
         try:
-            content = await openrouter.chat_completion(messages)
-        except openrouter.OpenRouterError:
+            content = await llm.chat_completion(messages)
+        except llm.LLMError:
             log.warning("tutor provider call failed", exc_info=True)
             raise HTTPException(status_code=502, detail=FRIENDLY_TUTOR_ERROR)
         except Exception:  # noqa: BLE001 - never leak internals

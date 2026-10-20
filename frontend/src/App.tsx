@@ -44,6 +44,9 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [screen, setScreen] = useState<Screen>("home");
   const [sceneIndex, setSceneIndex] = useState(0);
+  const [passedChecks, setPassedChecks] = useState<string[]>([]);
+  const [checkSelection, setCheckSelection] = useState<QuizOptionId | null>(null);
+  const [notesOpen, setNotesOpen] = useState(false);
   const [tutorQuestion, setTutorQuestion] = useState<string | null>(null);
   const [tutorAnswer, setTutorAnswer] = useState<string | null>(null);
   const [tutorError, setTutorError] = useState<string | null>(null);
@@ -71,6 +74,10 @@ export default function App() {
   screenRef.current = screen;
   const sceneRef = useRef(sceneIndex);
   sceneRef.current = sceneIndex;
+  const passedRef = useRef(passedChecks);
+  passedRef.current = passedChecks;
+  const notesRef = useRef(notesOpen);
+  notesRef.current = notesOpen;
   const lessonRef = useRef(lesson);
   lessonRef.current = lesson;
 
@@ -78,6 +85,7 @@ export default function App() {
   const tutorPendingRef = useRef(false);
   const tutorSeqRef = useRef(0);
   const quizSeqRef = useRef(0);
+  const quizManualAdvancingRef = useRef(false);
   const intentPendingRef = useRef(false);
   const intentSeqRef = useRef(0);
   const resetPendingRef = useRef(false);
@@ -86,6 +94,8 @@ export default function App() {
   const quizIndexRef = useRef(0);
   quizIndexRef.current = quizIndex;
 
+  const quizErrorRef = useRef(quizError);
+  quizErrorRef.current = quizError;
   const quizSnapRef = useRef({
     question: currentQuestion,
     grade,
@@ -109,6 +119,8 @@ export default function App() {
   }, []);
 
   const goLesson = useCallback(() => {
+    setPassedChecks([]);
+    setCheckSelection(null);
     setSceneIndex(0);
     setScreen("lesson");
   }, []);
@@ -140,6 +152,9 @@ export default function App() {
         const pristine = await resetDemo();
         setLearner(pristine);
         setSceneIndex(0);
+        setPassedChecks([]);
+        setCheckSelection(null);
+        setNotesOpen(false);
         setTutorQuestion(null);
         setTutorAnswer(null);
         setTutorError(null);
@@ -214,6 +229,11 @@ export default function App() {
   );
 
   const startQuiz = useCallback(() => {
+    if (screenRef.current === "lesson" && (!lessonRef.current || !passedRef.current.includes(lessonRef.current.scenes[sceneRef.current].id))) {
+      voiceRef.current?.sayAndShow("Answer the quick check first.");
+      return;
+    }
+    setNotesOpen(false);
     quizSeqRef.current += 1;
     const seq = quizSeqRef.current;
     voiceRef.current?.cancelSpeech();
@@ -235,6 +255,7 @@ export default function App() {
 
   const submitAnswer = useCallback(
     async (optionId: QuizOptionId) => {
+      quizManualAdvancingRef.current = false;
       const snap = quizSnapRef.current;
       if (screenRef.current !== "quiz") {
         return;
@@ -277,6 +298,10 @@ export default function App() {
           if (quizSeqRef.current !== seq || screenRef.current !== "quiz") {
             return;
           }
+          if (quizManualAdvancingRef.current) {
+            quizManualAdvancingRef.current = false;
+            return;
+          }
           if (index >= QUIZ_TOTAL - 1) {
             setLearner((prev) =>
               prev ? { ...prev, proficiency: result.proficiency } : prev,
@@ -306,10 +331,35 @@ export default function App() {
     [loadQuestion],
   );
 
+  const onQuizNext = useCallback(() => {
+    quizManualAdvancingRef.current = true;
+    voiceRef.current?.cancelSpeech();
+    const index = quizIndexRef.current;
+    if (index >= QUIZ_TOTAL - 1) {
+      const currentGrade = quizSnapRef.current.grade;
+      if (!currentGrade) {
+        quizManualAdvancingRef.current = false;
+        return;
+      }
+      setLearner((prev) =>
+        prev ? { ...prev, proficiency: currentGrade.proficiency } : prev,
+      );
+      setScreen("results");
+      voiceRef.current?.speak(
+        `You got ${scoreRef.current} out of ${QUIZ_TOTAL}. ${summaryFor(scoreRef.current)}`,
+      );
+      quizManualAdvancingRef.current = false;
+      return;
+    }
+    void loadQuestion(quizSeqRef.current, index + 1);
+  }, [loadQuestion]);
+
   const reviewLesson = useCallback(() => {
     quizSeqRef.current += 1;
     voiceRef.current?.cancelSpeech();
     setSceneIndex(0);
+    setPassedChecks([]);
+    setCheckSelection(null);
     setScreen("lesson");
     void fetchLearner()
       .then((data) => setLearner(data))
@@ -363,6 +413,18 @@ export default function App() {
     })();
   }, []);
 
+  const selectCheck = useCallback((option: QuizOptionId) => {
+    const scene = lessonRef.current?.scenes[sceneRef.current];
+    if (!scene) return;
+    setCheckSelection(option);
+    if (option === scene.check.correct_option) {
+      setPassedChecks((previous) => previous.includes(scene.id) ? previous : [...previous, scene.id]);
+      voiceRef.current?.speak("That is right! Say next when you are ready.");
+    } else {
+      voiceRef.current?.speak(`Not quite. ${scene.check.hint} Try again.`);
+    }
+  }, []);
+
   const dispatchIntent = useCallback(
     (result: IntentResult, rawText: string) => {
       const voice = voiceRef.current;
@@ -370,6 +432,11 @@ export default function App() {
         return;
       }
       const currentScreen = screenRef.current;
+      if (result.action === "help") {
+        const help = { home: "Say start lesson.", lesson: "Say a letter to answer the quick check, next, back, repeat, or ask a question.", quiz: "Say a letter to answer, repeat question, show lesson notes, hide notes, or read notes.", results: "Say review lesson or take quiz again." };
+        voice.sayAndShow(help[currentScreen]);
+        return;
+      }
       if (currentScreen === "home") {
         if (result.action === "start-lesson") {
           goLesson();
@@ -381,6 +448,16 @@ export default function App() {
       if (currentScreen === "quiz") {
         if (result.action === "select-option" && result.option) {
           void submitAnswer(result.option);
+        } else if (result.action === "open-notes") {
+          setNotesOpen(true);
+          voice.speak("Lesson notes are open. Say read notes to hear them.");
+        } else if (result.action === "close-notes") {
+          setNotesOpen(false);
+          voice.speak("Lesson notes are closed.");
+        } else if (result.action === "read-notes") {
+          voice.speak(lessonRef.current?.scenes.map((scene) => `${scene.title}. ${scene.narration}`).join(" ") ?? "Lesson notes are not ready.");
+        } else if (result.action === "retry-question" && quizSnapRef.current.question === null) {
+          retryQuizLoad();
         } else if (result.action === "repeat-question") {
           const snap = quizSnapRef.current;
           if (snap.question && !snap.quizLoading) {
@@ -410,20 +487,32 @@ export default function App() {
       }
       const index = sceneRef.current;
       const isLast = index === currentLesson.scenes.length - 1;
-      if (result.action === "next") {
+      if (result.action === "select-check" && result.option) {
+        selectCheck(result.option);
+      } else if (result.action === "home") {
+        voice.cancelSpeech();
+        setScreen("home");
+      } else if (result.action === "next") {
+        if (!passedRef.current.includes(currentLesson.scenes[index].id)) {
+          voice.sayAndShow("Answer the quick check first.");
+          return;
+        }
         if (isLast) {
           voice.sayAndShow("You are on the last scene. Say start quiz!");
         } else {
+          setCheckSelection(null);
           setSceneIndex(index + 1);
         }
       } else if (result.action === "back") {
         if (index === 0) {
-          voice.sayAndShow("This is the first scene.");
+          voice.cancelSpeech();
+          setScreen("home");
         } else {
+          setCheckSelection(null);
           setSceneIndex(index - 1);
         }
       } else if (result.action === "repeat") {
-        voice.speak(currentLesson.scenes[index].narration);
+        voice.speak(`${currentLesson.scenes[index].narration} Quick check. ${currentLesson.scenes[index].check.question} ${currentLesson.scenes[index].check.options.map((o) => `Option ${o.id}: ${o.text}.`).join(" ")}`);
       } else if (result.action === "start-quiz") {
         // Never leave the lesson early on a malformed result.
         if (!isLast) {
@@ -437,7 +526,7 @@ export default function App() {
         voice.reportUnrecognized();
       }
     },
-    [askLessonQuestion, goLesson, reviewLesson, speakQuestion, startQuiz, submitAnswer],
+    [askLessonQuestion, goLesson, reviewLesson, retryQuizLoad, selectCheck, speakQuestion, startQuiz, submitAnswer],
   );
 
   const handleTranscript = useCallback(
@@ -566,7 +655,8 @@ export default function App() {
 
   useEffect(() => {
     if (screen === "lesson" && lesson) {
-      voice.speak(lesson.scenes[sceneIndex].narration);
+      const scene = lesson.scenes[sceneIndex];
+      voice.speak(`${scene.narration} Quick check. ${scene.check.question} ${scene.check.options.map((option) => `Option ${option.id}: ${option.text}.`).join(" ")}`);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screen, sceneIndex, lesson !== null]);
@@ -625,7 +715,6 @@ export default function App() {
     );
   }
 
-  const sceneCount = lesson.scenes.length;
 
   return (
     <div className="min-h-screen bg-canvas">
@@ -648,9 +737,12 @@ export default function App() {
                 voice.cancelSpeech();
                 setScreen("home");
               }}
-              onBack={() => setSceneIndex((i) => Math.max(0, i - 1))}
-              onNext={() => setSceneIndex((i) => Math.min(sceneCount - 1, i + 1))}
+              onBack={() => { setCheckSelection(null); if (sceneIndex === 0) setScreen("home"); else setSceneIndex(sceneIndex - 1); }}
+              onNext={() => { if (passedChecks.includes(lesson.scenes[sceneIndex].id)) { setCheckSelection(null); setSceneIndex((i) => Math.min(lesson.scenes.length - 1, i + 1)); } }}
               onStartQuiz={startQuiz}
+              checkPassed={passedChecks.includes(lesson.scenes[sceneIndex].id)}
+              checkSelection={checkSelection}
+              onCheckSelect={selectCheck}
               tutorQuestion={tutorQuestion}
               tutorAnswer={tutorAnswer}
               tutorPending={tutorPending}
@@ -664,9 +756,13 @@ export default function App() {
                 total={QUIZ_TOTAL}
                 selectedOption={selectedOption}
                 grade={grade}
-                locked={grading || grade !== null || quizLoading}
+                locked={grading || quizLoading}
                 error={quizError}
                 onSelect={(id) => void submitAnswer(id)}
+                onNext={onQuizNext}
+                lesson={lesson}
+                notesOpen={notesOpen}
+                onToggleNotes={() => setNotesOpen((open) => !open)}
               />
             ) : (
               <div className="mx-auto w-full max-w-[1120px] px-5 pb-36 pt-6 md:px-16 md:pt-10">

@@ -27,12 +27,25 @@ class LearnerState(BaseModel):
     recent_attempts: list[Attempt] = Field(default_factory=list)
 
 
+class CheckOption(BaseModel):
+    id: Literal["A", "B", "C", "D"]
+    text: str
+
+
+class UnderstandingCheck(BaseModel):
+    question: str
+    options: list[CheckOption]
+    correct_option: Literal["A", "B", "C", "D"]
+    hint: str
+
+
 class Scene(BaseModel):
     id: str
     title: str
     concept: str
     narration: str
     visual_description: str
+    check: UnderstandingCheck
 
 
 class Lesson(BaseModel):

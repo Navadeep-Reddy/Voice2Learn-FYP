@@ -23,6 +23,7 @@ Environment (all optional, documented in ``backend/.env.example``):
 - ``VOICE2LEARN_WHISPER_MODEL_DIR``: exact cached model snapshot directory
 - ``VOICE2LEARN_WHISPER_DEVICE``: ``cuda`` (default) with CPU fallback
 - ``VOICE2LEARN_WHISPER_COMPUTE_TYPE``: ``float16`` (default) / ``int8``
+- ``VOICE2LEARN_WHISPER_INITIAL_PROMPT``: neutral concise lesson-context hint
 """
 
 from __future__ import annotations
@@ -44,6 +45,13 @@ MODEL_DIR = os.environ.get(
 )
 DEVICE = os.environ.get("VOICE2LEARN_WHISPER_DEVICE", "cuda")
 COMPUTE_TYPE = os.environ.get("VOICE2LEARN_WHISPER_COMPUTE_TYPE", "float16")
+
+# Neutral lesson-context hint: vocabulary aid only, never example commands
+# or sentences that the decoder could repeat into the transcript.
+INITIAL_PROMPT = os.environ.get(
+    "VOICE2LEARN_WHISPER_INITIAL_PROMPT",
+    "Short spoken replies about multiplication and division.",
+)
 
 
 class TranscriptionError(RuntimeError):
@@ -122,9 +130,17 @@ def transcribe(audio_path: str | Path) -> str:
             segments, _info = model.transcribe(
                 str(path),
                 language="en",
-                beam_size=1,
-                vad_filter=True,
+                beam_size=5,
+                temperature=0.0,
                 condition_on_previous_text=False,
+                vad_filter=True,
+                vad_parameters={
+                    "min_silence_duration_ms": 300,
+                    "speech_pad_ms": 200,
+                },
+                without_timestamps=True,
+                initial_prompt=INITIAL_PROMPT or None,
+                no_speech_threshold=0.6,
             )
             return "".join(segment.text for segment in segments).strip()
         except TranscriptionError:

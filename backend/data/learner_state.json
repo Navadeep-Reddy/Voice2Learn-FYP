@@ -1,8 +1,25 @@
 {
   "student_name": "Alex",
   "proficiency": {
-    "multiplication": 50,
+    "multiplication": 40,
     "division": 50
   },
-  "recent_attempts": []
+  "recent_attempts": [
+    {
+      "skill": "multiplication",
+      "question": "There are 6 bags with 7 apples in each bag. How many apples are there in total?",
+      "selected_option": "B",
+      "correct_option": "A",
+      "correct": false,
+      "timestamp": "2026-09-18T03:11:09.091893+00:00"
+    },
+    {
+      "skill": "multiplication",
+      "question": "There are 5 boxes with 8 pencils in each box. How many pencils are there in total?",
+      "selected_option": "C",
+      "correct_option": "B",
+      "correct": false,
+      "timestamp": "2026-09-18T03:11:23.891497+00:00"
+    }
+  ]
 }

@@ -36,7 +36,7 @@ The demo should prove:
 - Voice navigation
 - Contextual lesson Q&A with Nemotron
 - Local Whisper STT
-- Browser speech synthesis for TTS
+- Neural TTS with browser speech synthesis fallback
 - Five-question quiz
 - One Nemotron-generated MCQ at a time
 - Deterministic quiz grading
@@ -82,14 +82,17 @@ The demo should prove:
 ### AI / Voice
 
 - STT: user's existing local Whisper installation
-- Tutor + question generation: Nemotron (`nvidia/nemotron-3-super-120b-a12b:free`) through OpenRouter
-- TTS: browser `speechSynthesis`
+- Tutor + question generation: Nemotron through NVIDIA Integrate first
+  (`nvidia/nemotron-3-super-120b-a12b`), with OpenRouter fallback
+  (`nvidia/nemotron-3-super-120b-a12b:free`)
+- TTS: backend neural speech (`edge-tts`, network required) with browser `speechSynthesis` fallback
 
-The frontend must never call OpenRouter directly.
+The frontend must never call NVIDIA Integrate or OpenRouter directly. Backend
+Nemotron access uses NVIDIA Integrate as primary and OpenRouter as fallback.
 
 ## 5. Screens
 
-The MVP has four primary screens.
+The MVP has four primary screens. The post-review check/recap voice actions in Section 15 extend the original screen intents below.
 
 ### 5.1 Home
 
@@ -279,8 +282,17 @@ Browser security may require an initial physical action to grant microphone perm
 
 After that initial activation:
 
-- TTS speaks lesson/tutor/quiz content.
-- STT pauses while TTS is speaking.
+- the microphone stream stays monitored continuously (Web Audio speech
+  level measurement, not fixed recording windows);
+- an utterance starts when speech crosses a calibrated threshold (with a
+  small pre-roll so first phonemes are kept) and ends after sustained
+  silence (~700-1000ms);
+- transcription (`POST /api/stt/transcribe`) runs only on a complete
+  utterance; silence is never sent and resumes monitoring silently;
+- a maximum utterance cap (~12-15s) exists only as a runaway safety guard,
+  never as the normal utterance boundary;
+- TTS speaks lesson/tutor/quiz content;
+- STT pauses while TTS is speaking (any partial clip is discarded);
 - Listening resumes after speech ends.
 - Repeated physical interaction should not be required.
 
@@ -288,9 +300,9 @@ True barge-in while the system is speaking is not required.
 
 ### 7.3 Semantic Intent Classification
 
-Every non-empty STT transcript must be sent to `POST /api/intent/classify` for backend Nemotron semantic, screen-aware intent classification through OpenRouter. Frontend exact phrase matching must not decide voice actions.
+Every non-empty STT transcript must be sent to `POST /api/intent/classify` for backend Nemotron semantic, screen-aware intent classification through the NVIDIA-primary/OpenRouter-fallback boundary. Frontend exact phrase matching must not decide voice actions.
 
-The classifier maps imperfect STT semantically to only actions allowed on the current screen:
+The classifier maps imperfect STT semantically to only actions allowed on the current screen (including the post-review additions in Section 15):
 
 - home: `start-lesson`, `unclear`
 - lesson: `next`, `back`, `repeat`, `start-quiz` (final scene only), `ask-question`, `unclear` (spoken `continue` maps semantically to `next`, never a separate action)
@@ -563,7 +575,9 @@ Uses the local Whisper adapter.
 
 ### `POST /api/intent/classify`
 
-Classifies every non-empty STT transcript semantically with Nemotron through OpenRouter, using the current screen/context.
+Classifies every non-empty STT transcript semantically with Nemotron through
+the NVIDIA-primary/OpenRouter-fallback boundary, using the current
+screen/context.
 
 Input:
 
@@ -657,7 +671,7 @@ Examples:
 
 - Whisper cannot transcribe -> show `I didn't catch that. Try again.`
 - command is unclear -> stay on the current screen and ask the child to repeat
-- OpenRouter error -> show `My helper is having trouble right now. Try again.`
+- NVIDIA-primary and OpenRouter-fallback error -> show `My helper is having trouble right now. Try again.`
 - invalid LLM output after retry -> do not mutate state; allow retry
 - microphone unavailable -> keep click/tap fallback controls usable
 
@@ -683,3 +697,11 @@ The Pre-Review MVP is complete when all of the following work:
 14. The full normal flow requires no repeated physical interaction after initial microphone activation.
 15. The application visually follows `DESIGN.md`.
 16. No out-of-scope system was introduced.
+
+## 15. Post-Review MVP Requirements (user-requested)
+
+The five existing lesson scenes each include one authored, four-option understanding check, stored with the lesson JSON. Narration is followed by a short check question. A correct response is required before moving forward or starting the quiz; wrong responses receive a brief hint and may be retried without changing proficiency. Going backward and asking the contextual tutor remain available, and completed checks remain complete during the current lesson visit. Spoken answers use backend semantic intent classification with visible question/options; no frontend phrase matching. On scene 1, spoken Back returns Home. Help/repeat prompts describe the available actions without a new screen.
+
+During the quiz, an expandable authored lesson recap is viewable and readable aloud by voice, while the current question and progress remain unchanged. Quiz answers remain hidden before submission; recap content is the public lesson narration only. Essential voice operations across screens include help, repetition, lesson navigation, check selection/retry, quiz recap open/close/read, answering, retry on load error, and results navigation. Invalid commands stay on the current screen with a friendly prompt.
+
+TTS prefers a configurable neural speech voice through a small backend endpoint; if unavailable it falls back to browser speech synthesis. Spoken audio must pause STT and resume listening afterward, with cancellation on navigation. Neural TTS requires network availability; it must not download a local model or expose credentials. The original five-question Nemotron quiz, four screens, and proficiency rules remain unchanged.

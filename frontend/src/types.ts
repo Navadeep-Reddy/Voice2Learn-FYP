@@ -6,6 +6,7 @@ export interface Scene {
   concept: string;
   narration: string;
   visual_description: string;
+  check: { question: string; options: QuizOption[]; correct_option: QuizOptionId; hint: string };
 }
 
 export interface Lesson {
@@ -68,6 +69,13 @@ export type IntentAction =
   | "ask-question"
   | "select-option"
   | "repeat-question"
+  | "select-check"
+  | "help"
+  | "home"
+  | "retry-question"
+  | "open-notes"
+  | "close-notes"
+  | "read-notes"
   | "review-lesson"
   | "retake-quiz"
   | "unclear";
@@ -78,6 +86,10 @@ export interface IntentRequest {
   scene_id?: string | null;
   quiz_question?: string | null;
   quiz_options?: QuizOption[] | null;
+  check_question?: string | null;
+  check_options?: QuizOption[] | null;
+  notes_open?: boolean;
+  quiz_error?: boolean;
 }
 
 export interface IntentResult {

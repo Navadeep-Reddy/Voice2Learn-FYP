@@ -39,9 +39,9 @@ Do not invent requirements to resolve ambiguity. Prefer the smallest implementat
 - Repeated physical interaction must not be required during the normal demo flow.
 - True mid-sentence interruption/barge-in is **out of scope**.
 - STT uses the **Whisper installation already available locally**. Do not download, train, or fine-tune a model as part of this MVP.
-- Nemotron model `nvidia/nemotron-3-super-120b-a12b:free` is called through **OpenRouter**.
+- Nemotron uses NVIDIA Integrate model `nvidia/nemotron-3-super-120b-a12b` first, with OpenRouter model `nvidia/nemotron-3-super-120b-a12b:free` as the fallback.
 - Lesson Q&A uses the Nemotron AI tutor with current lesson/scene context.
-- Every non-empty STT transcript must be sent backend-side to Nemotron through OpenRouter for semantic, screen-aware intent classification using the current screen/context; frontend exact phrase matching must not decide voice actions.
+- Every non-empty STT transcript must be sent backend-side to Nemotron through the NVIDIA-primary/OpenRouter-fallback boundary for semantic, screen-aware intent classification using the current screen/context; frontend exact phrase matching must not decide voice actions.
 - Quiz questions are **fully Nemotron-generated**, generated **one at a time**, and are **multiple-choice only**.
 - Quiz grading is deterministic in the backend.
 - Learner proficiency is tracked only for:
@@ -58,7 +58,7 @@ Temporary Pre-Review implementations must sit behind small stable interfaces:
 
 - local JSON state -> later replaceable by Supabase
 - local Whisper adapter -> later replaceable by the fine-tuned Whisper deployment
-- OpenRouter Nemotron/LLM client -> isolated provider integration
+- NVIDIA-primary/OpenRouter-fallback Nemotron client -> isolated provider integrations behind one LLM boundary
 - backend Nemotron intent classifier -> small replaceable semantic routing boundary; frontend must not rely on exact local phrase matching
 - context builder -> generates `backend/data/context.md` and is reused by lesson Q&A, quiz generation, and intent classification
 - authored lesson JSON -> later replaceable by a larger lesson/content source
@@ -96,7 +96,7 @@ Prefer explicit code over clever abstractions.
 - Keep components small enough to understand, but do not split files mechanically.
 - Use descriptive names over comments that restate the code.
 - Keep all student-facing copy age-appropriate and short.
-- Do not expose secrets or OpenRouter keys to the frontend.
+- Do not expose secrets or NVIDIA/OpenRouter keys to the frontend.
 - Do not expose the quiz answer to the frontend before submission.
 - Do not silently recover from invalid Nemotron output. Validate, retry once, then return a friendly recoverable error.
 

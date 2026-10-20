@@ -466,3 +466,7 @@ At wider widths:
 - use neon gradients;
 - pack the screen with controls;
 - let decorative animation compete with lesson content.
+
+## 18. Post-Review UI Additions
+
+Keep understanding checks inside the existing lesson screen, below narration, with four large A–D tactile options and concise correct/try-again feedback. Show the forward button disabled until correct; keep Back and tutor access visible. On the quiz, place an unobtrusive Lesson Notes disclosure below the question/options; its compact recap must not obscure the question or fixed microphone. Voice help hints should be short and screen-specific. Preserve the current palette, readable feedback, minimum 48px targets and reduced-motion behavior.

@@ -1,4 +1,4 @@
-import type { Lesson } from "../types";
+import type { Lesson, QuizOptionId } from "../types";
 import SceneVisual from "./SceneVisual";
 import TutorBubble from "./TutorBubble";
 
@@ -9,6 +9,9 @@ interface Props {
   onNext: () => void;
   onHome: () => void;
   onStartQuiz: () => void;
+  checkPassed: boolean;
+  checkSelection: QuizOptionId | null;
+  onCheckSelect: (id: QuizOptionId) => void;
   tutorQuestion: string | null;
   tutorAnswer: string | null;
   tutorPending: boolean;
@@ -22,6 +25,9 @@ export default function LessonScreen({
   onNext,
   onHome,
   onStartQuiz,
+  checkPassed,
+  checkSelection,
+  onCheckSelect,
   tutorQuestion,
   tutorAnswer,
   tutorPending,
@@ -67,6 +73,22 @@ export default function LessonScreen({
         <p className="text-base text-ink md:text-lg">{scene.narration}</p>
       </section>
 
+      <section aria-label="Understanding check" className="mt-6 rounded-xl border border-line bg-surface p-5">
+        <h3 className="text-lg font-bold text-brand">Quick check</h3>
+        <p className="mt-2 text-lg text-ink">{scene.check.question}</p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          {scene.check.options.map((option) => (
+            <button type="button" key={option.id} onClick={() => onCheckSelect(option.id)}
+              className={`tactile min-h-[56px] bg-subtle p-3 text-left text-base font-bold text-ink ${checkSelection === option.id ? "border-brand bg-leaf" : ""}`}>
+              {option.id}. {option.text}
+            </button>
+          ))}
+        </div>
+        <p aria-live="polite" className="mt-3 text-base font-bold text-ink">
+          {checkPassed ? "That's right! You can move on." : checkSelection ? `Not quite. ${scene.check.hint} Try again!` : "Choose an answer before moving on."}
+        </p>
+      </section>
+
       <TutorBubble
         question={tutorQuestion}
         answer={tutorAnswer}
@@ -75,7 +97,7 @@ export default function LessonScreen({
       />
 
       <p className="mt-4 text-center text-base text-muted">
-        You can ask a question about this scene!
+        Say a choice, “back”, “repeat”, or ask about this scene!
       </p>
 
       {isLast && (

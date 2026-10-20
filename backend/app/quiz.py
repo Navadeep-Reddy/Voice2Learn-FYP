@@ -19,7 +19,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from . import openrouter
+from . import llm
 from .context_builder import rebuild_quiz_context
 from .models import Attempt, Lesson, Proficiency
 from .state import read_learner_state, write_learner_state
@@ -199,8 +199,8 @@ async def next_question() -> QuizNextResponse:
             {"role": "user", "content": context_text},
         ]
         try:
-            content = await openrouter.chat_completion(messages)
-        except openrouter.OpenRouterError:
+            content = await llm.chat_completion(messages)
+        except llm.LLMError:
             log.warning("quiz provider call failed", exc_info=True)
             raise HTTPException(status_code=502, detail=FRIENDLY_QUIZ_ERROR)
         except Exception:  # noqa: BLE001 - never leak internals

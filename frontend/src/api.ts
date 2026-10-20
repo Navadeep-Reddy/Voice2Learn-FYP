@@ -27,9 +27,31 @@ export interface TutorAnswer {
   answer: string;
 }
 
+/** Match the upload filename to the actual recorder MIME type. */
+function utteranceFilename(mimeType: string): string {
+  const type = mimeType.toLowerCase();
+  if (type.includes("wav")) {
+    return "utterance.wav";
+  }
+  if (type.includes("mp4") || type.includes("m4a")) {
+    return "utterance.m4a";
+  }
+  // Check webm before opus: Chrome reports "audio/webm;codecs=opus".
+  if (type.includes("webm")) {
+    return "utterance.webm";
+  }
+  if (type.includes("ogg")) {
+    return "utterance.ogg";
+  }
+  if (type.includes("opus")) {
+    return "utterance.opus";
+  }
+  return "utterance.webm";
+}
+
 export async function transcribeAudio(blob: Blob): Promise<string> {
   const form = new FormData();
-  form.append("file", blob, "utterance.webm");
+  form.append("file", blob, utteranceFilename(blob.type));
   const response = await fetch(`${API_BASE_URL}/api/stt/transcribe`, {
     method: "POST",
     body: form,
@@ -104,6 +126,15 @@ export function classifyIntent(body: IntentRequest): Promise<IntentResult> {
 
 export function resetDemo(): Promise<LearnerState> {
   return postJson<LearnerState>("/api/demo/reset");
+}
+
+export async function synthesizeSpeech(text: string, signal: AbortSignal): Promise<Blob> {
+  const response = await fetch(`${API_BASE_URL}/api/tts/speak`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }), signal,
+  });
+  if (!response.ok) throw new Error("Neural narration unavailable");
+  return response.blob();
 }
 
 export { API_BASE_URL };

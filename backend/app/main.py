@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import os
 import logging
 import tempfile
 from pathlib import Path
@@ -11,12 +13,13 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, UploadFile, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import stt
 from .intent import router as intent_router
 from .models import LearnerState, Lesson, TranscriptionResponse
+from pydantic import BaseModel, Field
 from .quiz import reset_active_question
 from .quiz import router as quiz_router
 from .state import read_learner_state, reset_learner_state
@@ -98,3 +101,29 @@ async def transcribe_audio(file: UploadFile = File(...)) -> TranscriptionRespons
         await file.close()
         if temp_path is not None:
             temp_path.unlink(missing_ok=True)
+
+
+class SpeechRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=2500)
+
+
+@app.post("/api/tts/speak")
+async def synthesize_speech(body: SpeechRequest) -> Response:
+    """Optional neural voice; client falls back to built-in speech on failure."""
+    try:
+        import edge_tts
+
+        voice = os.getenv("VOICE2LEARN_TTS_VOICE", "en-US-JennyNeural")
+        audio = bytearray()
+        async with asyncio.timeout(20):
+            async for chunk in edge_tts.Communicate(body.text, voice).stream():
+                if chunk["type"] == "audio":
+                    audio.extend(chunk["data"])
+                if len(audio) > 3_000_000:
+                    raise ValueError("speech too long")
+        if not audio:
+            raise ValueError("no speech returned")
+        return Response(content=bytes(audio), media_type="audio/mpeg")
+    except Exception:  # noqa: BLE001 - never leak provider failure to child
+        log.warning("neural narration unavailable; client will use browser voice", exc_info=True)
+        raise HTTPException(status_code=503, detail="Speech is unavailable. Using browser voice.")

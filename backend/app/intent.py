@@ -10,7 +10,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
-from . import openrouter
+from . import llm
 from .context_builder import rebuild_intent_context
 from .models import Lesson
 from .state import read_learner_state
@@ -33,6 +33,13 @@ IntentAction = Literal[
     "ask-question",
     "select-option",
     "repeat-question",
+    "select-check",
+    "help",
+    "home",
+    "retry-question",
+    "open-notes",
+    "close-notes",
+    "read-notes",
     "review-lesson",
     "retake-quiz",
     "unclear",
@@ -40,10 +47,10 @@ IntentAction = Literal[
 OptionId = Literal["A", "B", "C", "D"]
 
 ALLOWED_ACTIONS: dict[str, set[str]] = {
-    "home": {"start-lesson", "unclear"},
-    "lesson": {"next", "back", "repeat", "start-quiz", "ask-question", "unclear"},
-    "quiz": {"select-option", "repeat-question", "unclear"},
-    "results": {"review-lesson", "retake-quiz", "unclear"},
+    "home": {"start-lesson", "help", "unclear"},
+    "lesson": {"next", "back", "home", "repeat", "start-quiz", "ask-question", "select-check", "help", "unclear"},
+    "quiz": {"select-option", "repeat-question", "open-notes", "close-notes", "read-notes", "retry-question", "help", "unclear"},
+    "results": {"review-lesson", "retake-quiz", "help", "unclear"},
 }
 
 SYSTEM_PROMPT = (
@@ -51,8 +58,11 @@ SYSTEM_PROMPT = (
     "Map the raw STT transcript semantically to exactly one action allowed on "
     "the current screen, using the provided screen context. STT is imperfect: "
     "match meaning, not exact words. "
+    "On any screen, explain available commands with help. "
     "On home, lesson-start requests (start, let's learn, multiplication and "
     "division) map to start-lesson. "
+    "On lesson, go home maps to home; go back/previous maps to back (from the first scene, back returns home). "
+    "When a visible understanding check is active, spoken letters, option labels or visible answer text map to select-check and its matching option. "
     "On lesson, continue/go on/move on map to next; repeat/say again map to "
     "repeat; start quiz/quiz me map to start-quiz (final scene only); a "
     "free-form question about the lesson maps to ask-question; anything else "
@@ -60,12 +70,12 @@ SYSTEM_PROMPT = (
     "On quiz, spoken letters and variants (bee, be, see, sea, dee, option B, "
     "second one, I think twelve where twelve matches the visible option text) "
     "map to select-option with the matching visible option id A/B/C/D; "
-    "repeat question maps to repeat-question; anything else maps to unclear. "
+    "repeat question maps to repeat-question; show/open lesson notes maps to open-notes, close/hide notes maps to close-notes, read lesson notes aloud maps to read-notes; retry loading a failed question maps to retry-question. Otherwise unclear. "
     "On results, review lesson maps to review-lesson; take quiz again maps to "
     "retake-quiz; anything else maps to unclear. "
     'Reply with JSON only in exactly this shape: {"action": "...", '
     '"option": "A"|"B"|"C"|"D"|null}. '
-    "Option is required only for select-option and must be null otherwise. "
+    "Option is required for select-option or select-check and must be null otherwise. "
     "Never include or rewrite question content."
 )
 
@@ -90,6 +100,10 @@ class IntentClassifyRequest(BaseModel):
     scene_id: str | None = None
     quiz_question: str | None = None
     quiz_options: list[IntentQuizOption] | None = None
+    check_question: str | None = None
+    check_options: list[IntentQuizOption] | None = None
+    notes_open: bool = False
+    quiz_error: bool = False
 
     @field_validator("transcript")
     @classmethod
@@ -103,26 +117,32 @@ class IntentClassifyRequest(BaseModel):
         if self.screen == "lesson":
             if not (self.scene_id or "").strip():
                 raise ValueError("scene_id is required for lesson")
-            if self.quiz_question is not None or self.quiz_options is not None:
+            if self.quiz_question is not None or self.quiz_options is not None or self.notes_open or self.quiz_error:
                 raise ValueError("quiz context is only allowed for quiz")
+            if (self.check_question is None) != (self.check_options is None):
+                raise ValueError("check question and options are required together")
+            if self.check_options is not None and (not self.check_question or sorted(o.id for o in self.check_options) != ["A", "B", "C", "D"]):
+                raise ValueError("invalid check context")
         elif self.screen == "quiz":
-            if self.scene_id is not None:
-                raise ValueError("scene_id is only allowed for lesson")
-            if not (self.quiz_question or "").strip():
+            if self.scene_id is not None or self.check_question is not None or self.check_options is not None:
+                raise ValueError("lesson context is only allowed for lesson")
+            if self.quiz_error and (self.quiz_question is not None or self.quiz_options is not None):
+                raise ValueError("failed quiz question must not include options")
+            if not self.quiz_error and not (self.quiz_question or "").strip():
                 raise ValueError("quiz_question is required for quiz")
-            if self.quiz_options is None:
+            if self.quiz_options is None and not self.quiz_error:
                 raise ValueError("quiz_options is required for quiz")
-            if len(self.quiz_options) != 4:
+            if self.quiz_options is not None and len(self.quiz_options) != 4:
                 raise ValueError("quiz_options must contain exactly 4 options")
-            ids = sorted(option.id for option in self.quiz_options)
+            ids = sorted(option.id for option in (self.quiz_options or [])) if not self.quiz_error else ["A", "B", "C", "D"]
             if ids != ["A", "B", "C", "D"]:
                 raise ValueError("quiz_options must contain exactly A/B/C/D once each")
-            for option in self.quiz_options:
+            for option in (self.quiz_options or []):
                 if not option.text.strip():
                     raise ValueError("quiz option text must not be blank")
         else:
-            if self.scene_id is not None:
-                raise ValueError("scene_id is only allowed for lesson")
+            if self.scene_id is not None or self.check_question is not None or self.check_options is not None or self.notes_open or self.quiz_error:
+                raise ValueError("context is only allowed on its screen")
             if self.quiz_question is not None or self.quiz_options is not None:
                 raise ValueError("quiz context is only allowed for quiz")
         return self
@@ -163,11 +183,11 @@ def parse_intent(
         raise ValueError("provider content invalid") from exc
     if parsed.action not in set(allowed):
         raise ValueError("action not allowed for screen")
-    if parsed.action == "select-option":
+    if parsed.action in {"select-option", "select-check"}:
         if parsed.option is None:
-            raise ValueError("option is required for select-option")
+            raise ValueError("option is required for selection")
     elif parsed.option is not None:
-        raise ValueError("option must be null unless select-option")
+        raise ValueError("option must be null unless selecting")
     if parsed.action == "start-quiz" and not is_final_scene:
         raise ValueError("start-quiz is only allowed on the final scene")
     return IntentClassifyResponse(action=parsed.action, option=parsed.option)
@@ -201,6 +221,20 @@ async def classify_intent(body: IntentClassifyRequest) -> IntentClassifyResponse
         ]
 
     allowed = allowed_actions_for(body.screen, is_final)
+    if body.screen == "lesson":
+        if body.check_question is None:
+            allowed.remove("select-check")
+        elif scene and (body.check_question != scene.check.question or [(o.id, o.text) for o in body.check_options or []] != [(o.id, o.text) for o in scene.check.options]):
+            raise HTTPException(status_code=422, detail="Invalid check context.")
+    if body.screen == "quiz":
+        if body.quiz_error:
+            allowed = [a for a in allowed if a not in {"select-option", "repeat-question"}]
+        else:
+            allowed.remove("retry-question")
+        if body.notes_open:
+            allowed.remove("open-notes")
+        else:
+            allowed.remove("close-notes")
 
     last_error: Exception | None = None
     for _ in range(2):
@@ -217,14 +251,18 @@ async def classify_intent(body: IntentClassifyRequest) -> IntentClassifyResponse
             is_final if body.screen == "lesson" else None,
             quiz_question,
             quiz_options,
+            body.check_question,
+            ([{"id": o.id, "text": o.text} for o in body.check_options] if body.check_options else None),
+            body.notes_open,
+            body.quiz_error,
         )
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": context_text},
         ]
         try:
-            content = await openrouter.chat_completion(messages)
-        except openrouter.OpenRouterError:
+            content = await llm.chat_completion(messages)
+        except llm.LLMError:
             log.warning("intent provider call failed", exc_info=True)
             raise HTTPException(status_code=502, detail=FRIENDLY_INTENT_ERROR)
         except Exception:  # noqa: BLE001 - never leak internals

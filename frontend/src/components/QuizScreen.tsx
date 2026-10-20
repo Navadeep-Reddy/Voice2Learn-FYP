@@ -1,4 +1,4 @@
-import type { QuizGrade, QuizOptionId, QuizQuestion } from "../types";
+import type { Lesson, QuizGrade, QuizOptionId, QuizQuestion } from "../types";
 
 interface Props {
   question: QuizQuestion;
@@ -9,6 +9,10 @@ interface Props {
   locked: boolean;
   error: string | null;
   onSelect: (id: QuizOptionId) => void;
+  onNext?: () => void;
+  lesson: Lesson;
+  notesOpen: boolean;
+  onToggleNotes: () => void;
 }
 
 export default function QuizScreen({
@@ -20,6 +24,10 @@ export default function QuizScreen({
   locked,
   error,
   onSelect,
+  onNext,
+  lesson,
+  notesOpen,
+  onToggleNotes,
 }: Props) {
   const feedbackShown = grade !== null;
 
@@ -68,7 +76,7 @@ export default function QuizScreen({
           <button
             key={option.id}
             type="button"
-            disabled={locked}
+            disabled={locked || feedbackShown}
             onClick={() => onSelect(option.id)}
             aria-label={`Option ${option.id}: ${option.text}${
               feedbackShown && option.id === grade.correct_option
@@ -88,10 +96,6 @@ export default function QuizScreen({
           </button>
         ))}
       </div>
-
-      <p className="mt-4 text-center text-base text-muted">
-        Say A, B, C, or D — or tap your answer!
-      </p>
 
       {error && !feedbackShown && (
         <p
@@ -120,6 +124,30 @@ export default function QuizScreen({
           </p>
         </section>
       )}
+
+      {feedbackShown && !locked && onNext && (
+        <div className="mt-6 flex justify-center">
+          <button
+            type="button"
+            onClick={onNext}
+            className="tactile min-h-[48px] rounded-xl bg-brand px-8 py-3 text-base font-bold text-white"
+          >
+            Next
+          </button>
+        </div>
+      )}
+
+      <section className="mt-6 rounded-xl border border-line bg-surface p-5" aria-label="Lesson notes">
+        <button type="button" aria-expanded={notesOpen} onClick={onToggleNotes} className="min-h-[48px] text-base font-bold text-brand">
+          {notesOpen ? "Hide lesson notes" : "Show lesson notes"}
+        </button>
+        {notesOpen && <div className="mt-3 space-y-3">
+          {lesson.scenes.map((scene) => <p key={scene.id} className="text-base text-ink"><strong>{scene.title}:</strong> {scene.narration}</p>)}
+        </div>}
+      </section>
+      <p className="mt-4 text-center text-base text-muted">
+        Say A, B, C, or D; say “show lesson notes” or “read notes”!
+      </p>
     </div>
   );
 }
