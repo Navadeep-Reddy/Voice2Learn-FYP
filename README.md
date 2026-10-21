@@ -55,7 +55,7 @@ The backend keeps NVIDIA provider details behind one Nemotron LLM boundary;
 the frontend never calls NVIDIA directly. NVIDIA failures return a friendly
 recoverable error without trying another provider.
 
-Nemotron requests explicitly disable extended reasoning (`chat_template_kwargs.enable_thinking=false`) for the short structured demo responses. Requests have a 60-second total deadline (5-second connection timeout). Transient NVIDIA HTTP 500/502/503/504 responses retry automatically up to three times, with 0.5/1/2-second backoff inside that same deadline; the quiz remains loading rather than asking for manual retry after each brief failure. Authentication/configuration/other HTTP errors (including 429) and provider timeouts do not automatically retry. A quiz-generation timeout says the question is taking too long; say “try again” or use its retry button if automatic recovery fails. Invalid structured output still retries once, and quiz arithmetic remains backend-validated. NVIDIA availability and response latency are external dependencies; automatic recovery is bounded rather than an availability guarantee.
+Nemotron requests explicitly disable extended reasoning (`chat_template_kwargs.enable_thinking=false`) for the short structured demo responses. Requests have a 60-second total deadline (5-second connection timeout). Transient NVIDIA HTTP 500/502/503/504 responses retry automatically up to three times, with 0.5/1/2-second backoff inside that same deadline; the quiz remains loading rather than asking for manual retry after each brief failure. An optional `NVIDIA_FALLBACK_API_KEY` switches credentials once per request after primary HTTP 401/403/429 or 500/502/503/504. The fallback uses the same NVIDIA endpoint/model and shares the four-attempt limit and deadline; it does not add another retry budget. Blank/duplicate backup keys are ignored; the primary key remains required. Without a backup (or after switching), 401/403/429 fail immediately. Other HTTP errors, missing primary configuration, transport failures, timeouts and malformed provider envelopes do not trigger credential switching. A quiz-generation timeout says the question is taking too long; say “try again” or use its retry button if automatic recovery fails. Invalid structured output still retries once, and quiz arithmetic remains backend-validated. NVIDIA availability and response latency are external dependencies; automatic recovery is bounded rather than an availability guarantee.
 
 ## Expected Repository Shape
 
@@ -95,11 +95,14 @@ Current `backend/.env.example` documents:
 
 ```env
 NVIDIA_API_KEY=
+NVIDIA_FALLBACK_API_KEY=
 NVIDIA_MODEL=nvidia/nemotron-3-super-120b-a12b
 VOICE2LEARN_TTS_VOICE=en-US-JennyNeural
 ```
 
 Keep the model identifier configurable rather than hardcoding it.
+
+Enter the optional second account's key directly in ignored `backend/.env` under `NVIDIA_FALLBACK_API_KEY`, then restart the backend (`./stop-dev.sh` followed by `./start-dev.sh` when using the development launcher). Keep both keys server-side; logs identify only `primary` or `fallback`, never key values. Leave the fallback field blank to preserve single-key behavior. Credentials are selected per request, not through persistent account rotation.
 
 Whisper configuration must match this machine’s existing runtime/cache. The checked-in defaults reference the original developer’s Linux path and CUDA; they are not verified defaults for every machine. Inspect the actual installation before changing the adapter; do not download a model.
 

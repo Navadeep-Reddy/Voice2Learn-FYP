@@ -347,6 +347,8 @@ User-requested speech revision (2026-10-21): references below to preserving neur
 
 User-requested provider revision (2026-10-21): Nemotron uses NVIDIA Integrate only, without an alternate-provider fallback. Provider references in original Passes 1–6 are historical; preserve the current NVIDIA-only boundary during the follow-up passes.
 
+The user additionally authorized an optional secondary NVIDIA credential within that same provider boundary; SPEC owns its failover conditions and shared retry/deadline limits. This does not authorize a different provider or starting the Jev passes.
+
 ## Prerequisite R — Reconcile the Existing Post-Review Baseline
 
 ### Goal
